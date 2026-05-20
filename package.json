@@ -1,0 +1,91 @@
+{
+  "name": "proquoment",
+  "version": "0.1.0",
+  "private": true,
+  "rocketCritical": {
+    "dependencies": [
+      "next",
+      "react",
+      "react-dom",
+      "@dhiwise/component-tagger",
+      "@tailwindcss/typography",
+      "recharts"
+    ],
+    "devDependencies": [
+      "typescript",
+      "@types/node",
+      "@types/react",
+      "@types/react-dom",
+      "@typescript-eslint/eslint-plugin",
+      "@typescript-eslint/parser",
+      "eslint-config-next",
+      "tailwindcss",
+      "autoprefixer",
+      "postcss",
+      "eslint",
+      "prettier",
+      "@netlify/plugin-nextjs"
+    ],
+    "scripts": [
+      "dev",
+      "build",
+      "start",
+      "lint",
+      "lint:fix",
+      "format",
+      "serve",
+      "type-check"
+    ],
+    "warning": "🚨 CRITICAL: DO NOT REMOVE OR MODIFY ABOVE DEPENDENCIES - Required for Next.js 15 TypeScript app functionality"
+  },
+  "scripts": {
+    "dev": "next dev -p 5000",
+    "build": "next build",
+    "start": "next dev -p 5000",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,md,json}\"",
+    "serve": "next start",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^1.5.0",
+    "@dhiwise/component-tagger": "^1.0.15",
+    "@heroicons/react": "^2.2.0",
+    "@rocketnew/llm-sdk": "^1.0.3",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.4",
+    "@tailwindcss/forms": "^0.5.11",
+    "@tailwindcss/typography": "^0.5.19",
+    "cobe": "^2.0.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.14.0",
+    "next": "^15.1.11",
+    "react": "^19.0.3",
+    "react-dom": "^19.0.3",
+    "react-hook-form": "^7.75.0",
+    "react-hot-toast": "^2.6.0",
+    "react-markdown": "^10.1.0",
+    "recharts": "^2.15.4",
+    "sonner": "^1.7.4"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@netlify/plugin-nextjs": "^5.15.10",
+    "@types/node": "^20.19.39",
+    "@types/react": "^19.0.3",
+    "@types/react-dom": "^19.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.59.1",
+    "@typescript-eslint/parser": "^8.59.1",
+    "autoprefixer": "^10.4.2",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^15.5.15",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "postcss": "^8.4.8",
+    "prettier": "^3.8.3",
+    "tailwindcss": "^3.4.6",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.9.3"
+  }
+}
