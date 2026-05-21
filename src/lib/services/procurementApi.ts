@@ -334,7 +334,31 @@ export async function submitRFQ(rfq: {
   const supabase = getSupabase();
   if (!supabase) throw new Error('No Supabase client');
 
-  const userId = await requireUserId();
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = user?.id;
+  if (!userId) throw new Error('Not authenticated');
+
+  let resolvedBuyer = rfq.buyer;
+  const isDemo = user.email ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(user.email) : false;
+  if (isDemo) {
+    resolvedBuyer = 'Demo User';
+  } else {
+    try {
+      const { data: profile } = await supabase
+        .from('buyer_profiles')
+        .select('organization_name, legal_name')
+        .eq('id', userId)
+        .maybeSingle();
+
+      resolvedBuyer = profile?.organization_name ||
+                      profile?.legal_name ||
+                      user.user_metadata?.full_name ||
+                      user.email?.split('@')[0] ||
+                      'Enterprise Buyer';
+    } catch {
+      resolvedBuyer = user.email?.split('@')[0] || 'Enterprise Buyer';
+    }
+  }
 
   const id = `RFQ-${Date.now().toString(36).toUpperCase()}`;
   const dateStr = new Date().toLocaleDateString('en-US', {
@@ -346,7 +370,7 @@ export async function submitRFQ(rfq: {
   const { error } = await supabase.from('rfqs').insert({
     id,
     product: rfq.product,
-    buyer: rfq.buyer || 'Enterprise Buyer',
+    buyer: resolvedBuyer,
     qty: rfq.qty,
     value: rfq.value || 'TBD',
     status: 'new',

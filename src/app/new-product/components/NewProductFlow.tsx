@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { saveProduct } from '@/lib/productStore';
 import { submitRFQ } from '@/lib/services/procurementApi';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Step = 'intro' | 'transition' | 'choose' | 'upload' | 'builder';
@@ -1026,6 +1027,7 @@ function InfoRow({ label, value, bold }: { label: string; value: string; bold?: 
 // ─── Step 4: RFQ Builder (Dual Gemini calls) ──────────────────────────────────
 function BuilderStep({ productText, productName }: { productText: string; productName: string }) {
   const router = useRouter();
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [rfqTitle, setRfqTitle] = useState(productName || 'New Product RFQ');
@@ -1292,12 +1294,17 @@ function BuilderStep({ productText, productName }: { productText: string; produc
     });
 
     try {
+      const isDemo = user?.email ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(user.email) : false;
+      const buyerName = isDemo
+        ? 'Demo User'
+        : user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Enterprise Buyer';
+
       await submitRFQ({
         product: title,
         qty: rfq.moq || 'TBD',
         value: 'TBD',
         specs: rfq.specifications.map((s) => `${s.label}: ${s.value}`).join(', '),
-        buyer: 'Demo User',
+        buyer: buyerName,
         description: rfq.description || undefined,
         aiChat: conversationHistory,
       });
@@ -1587,6 +1594,7 @@ function UploadStep({
 // ─── Main orchestrator ────────────────────────────────────────────────────────
 export default function NewProductFlow() {
   const router = useRouter();
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>('intro');
   const [productText, setProductText] = useState('');
   const [rfqMethod, setRfqMethod] = useState<RFQMethod>('scratch');
@@ -1629,12 +1637,17 @@ export default function NewProductFlow() {
       });
 
       try {
+        const isDemo = user?.email ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(user.email) : false;
+        const buyerName = isDemo
+          ? 'Demo User'
+          : user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Enterprise Buyer';
+
         await submitRFQ({
           product: title,
           qty: 'TBD',
           value: 'TBD',
           specs: 'Uploaded complete RFQ files.',
-          buyer: 'Demo User',
+          buyer: buyerName,
         });
       } catch (err) {
         console.error('Failed to submit RFQ to Admin', err);
