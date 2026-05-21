@@ -1,20 +1,47 @@
 // Buyer Dashboard — Shared Procurement API Layer
 // Connects to the shared Supabase instance (Admin's DB: apmwmncqmhjacwrmnfms)
+// All reads/writes are scoped to the authenticated buyer's user ID.
 import { createClient } from '@/lib/supabase/client';
 
 function getSupabase() {
   return createClient();
 }
 
-// ── Fetchers ──────────────────────────────────────────
+/** Returns the current authenticated user ID (throws if not authed) */
+async function requireUserId(): Promise<string> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase not available');
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) throw new Error('Not authenticated');
+  return user.id;
+}
+
+/** Returns the current user ID or null (for read-only fetchers that should silently return []) */
+async function getUserId(): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+// ── Fetchers ──────────────────────────────────────────────────────────────
 
 export async function fetchBuyerRFQs() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
   const { data, error } = await supabase
     .from('rfqs')
     .select('*')
+    .eq('buyer_id', userId) // Scoped to current buyer
     .order('created_at', { ascending: false });
+
   if (error) {
     console.error('fetchBuyerRFQs:', error);
     return [];
@@ -38,16 +65,35 @@ export async function fetchBuyerRFQs() {
 export async function fetchBuyerQuotes() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
+  // Quotes are linked to rfqs; RLS policy on quotes filters by rfq.buyer_id
   const { data, error } = await supabase
     .from('quotes')
-    .select('*')
+    .select('*, rfqs!inner(buyer_id)')
+    .eq('rfqs.buyer_id', userId) // Join filter — only this buyer's quotes
     .in('status', ['sent', 'accepted', 'rejected'])
     .order('created_at', { ascending: false });
+
   if (error) {
-    console.error('fetchBuyerQuotes:', error);
-    return [];
+    // Fallback: fetch without join (RLS will still enforce buyer scope)
+    const { data: fallback, error: fallbackErr } = await supabase
+      .from('quotes')
+      .select('*')
+      .in('status', ['sent', 'accepted', 'rejected'])
+      .order('created_at', { ascending: false });
+    if (fallbackErr) {
+      console.error('fetchBuyerQuotes:', fallbackErr);
+      return [];
+    }
+    return (fallback || []).map(mapQuote);
   }
-  return (data || []).map((r: any) => ({
+  return (data || []).map(mapQuote);
+}
+
+function mapQuote(r: any) {
+  return {
     id: r.id,
     rfqId: r.rfq_id,
     orderId: r.order_id,
@@ -65,16 +111,21 @@ export async function fetchBuyerQuotes() {
     status: r.status,
     sentAt: r.sent_at,
     createdAt: r.created_at,
-  }));
+  };
 }
 
 export async function fetchBuyerOrders() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
   const { data, error } = await supabase
     .from('orders')
     .select('*')
+    .eq('buyer_id', userId) // Scoped to current buyer
     .order('created_at', { ascending: false });
+
   if (error) {
     console.error('fetchBuyerOrders:', error);
     return [];
@@ -98,10 +149,24 @@ export async function fetchBuyerOrders() {
 export async function fetchBuyerQCReports() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
+  // QC reports are linked to orders; only fetch for this buyer's orders
+  const { data: orderIds } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('buyer_id', userId);
+
+  const ids = (orderIds || []).map((o: any) => o.id);
+  if (ids.length === 0) return [];
+
   const { data, error } = await supabase
     .from('qc_reports')
     .select('*')
+    .in('order_id', ids)
     .order('uploaded_at', { ascending: false });
+
   if (error) {
     console.error('fetchBuyerQCReports:', error);
     return [];
@@ -121,10 +186,24 @@ export async function fetchBuyerQCReports() {
 export async function fetchBuyerShipments() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
+  // Shipments scoped to this buyer's orders
+  const { data: orderIds } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('buyer_id', userId);
+
+  const ids = (orderIds || []).map((o: any) => o.id);
+  if (ids.length === 0) return [];
+
   const { data, error } = await supabase
     .from('shipments')
     .select('*')
+    .in('order_id', ids)
     .order('created_at', { ascending: false });
+
   if (error) {
     console.error('fetchBuyerShipments:', error);
     return [];
@@ -150,10 +229,23 @@ export async function fetchBuyerShipments() {
 export async function fetchBuyerInvoices() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
+  const { data: orderIds } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('buyer_id', userId);
+
+  const ids = (orderIds || []).map((o: any) => o.id);
+  if (ids.length === 0) return [];
+
   const { data, error } = await supabase
     .from('invoices')
     .select('*')
+    .in('order_id', ids)
     .order('created_at', { ascending: false });
+
   if (error) {
     console.error('fetchBuyerInvoices:', error);
     return [];
@@ -174,12 +266,17 @@ export async function fetchBuyerInvoices() {
 export async function fetchBuyerNotifications() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
     .eq('target_dashboard', 'buyer')
+    .or(`buyer_id.eq.${userId},type.eq.admin_announcement`) // own + broadcasts
     .order('created_at', { ascending: false })
     .limit(30);
+
   if (error) {
     console.error('fetchBuyerNotifications:', error);
     return [];
@@ -200,10 +297,23 @@ export async function fetchBuyerNotifications() {
 export async function fetchBuyerDocuments() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
+  const { data: orderIds } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('buyer_id', userId);
+
+  const ids = (orderIds || []).map((o: any) => o.id);
+  if (ids.length === 0) return [];
+
   const { data, error } = await supabase
     .from('documents')
     .select('*')
+    .in('order_id', ids)
     .order('created_at', { ascending: false });
+
   if (error) {
     console.error('fetchBuyerDocuments:', error);
     return [];
@@ -220,7 +330,7 @@ export async function fetchBuyerDocuments() {
   }));
 }
 
-// ── Write Operations ──────────────────────────────────
+// ── Write Operations ──────────────────────────────────────────────────────
 
 export async function submitRFQ(rfq: {
   product: string;
@@ -235,6 +345,9 @@ export async function submitRFQ(rfq: {
 }) {
   const supabase = getSupabase();
   if (!supabase) throw new Error('No Supabase client');
+
+  const userId = await requireUserId();
+
   const id = `RFQ-${Date.now().toString(36).toUpperCase()}`;
   const dateStr = new Date().toLocaleDateString('en-US', {
     month: 'short',
@@ -242,7 +355,6 @@ export async function submitRFQ(rfq: {
     year: 'numeric',
   });
 
-  // Insert columns including deadline, specs, description, and ai_chat
   const { error } = await supabase.from('rfqs').insert({
     id,
     product: rfq.product,
@@ -255,10 +367,10 @@ export async function submitRFQ(rfq: {
     specs: rfq.specs || null,
     description: rfq.description || null,
     ai_chat: rfq.aiChat || null,
+    buyer_id: userId, // Always stamp with the authenticated buyer's ID
   });
   if (error) throw error;
 
-  // Build a descriptive notification message that captures all the extra fields
   const extras = [
     rfq.specs && `Specs: ${rfq.specs}`,
     rfq.targetPrice && `Target: ${rfq.targetPrice}`,
@@ -267,7 +379,7 @@ export async function submitRFQ(rfq: {
     .filter(Boolean)
     .join(' | ');
 
-  // Notify admin
+  // Notify admin (no buyer_id — admin notifications are unscoped)
   await supabase
     .from('notifications')
     .insert({
@@ -296,9 +408,13 @@ export async function insertOrder(orderData: {
   dutiesCost?: number;
   supplierCity?: string;
   buyerCountry?: string;
+  buyerId?: string; // Explicit buyer_id override (used internally)
 }) {
   const supabase = getSupabase();
   if (!supabase) throw new Error('No Supabase client');
+
+  // Use explicitly passed buyerId (from acceptQuote) or resolve from session
+  const userId = orderData.buyerId || (await requireUserId());
 
   const id = orderData.id || `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
   const { error } = await supabase.from('orders').insert({
@@ -320,6 +436,7 @@ export async function insertOrder(orderData: {
     quote_id: orderData.quoteId,
     buyer_accepted: true,
     archived: false,
+    buyer_id: userId, // Stamp with buyer's ID
   });
 
   if (error) throw error;
@@ -330,12 +447,18 @@ export async function acceptQuote(quoteId: string, rfqId: string) {
   const supabase = getSupabase();
   if (!supabase) throw new Error('No Supabase client');
 
+  const userId = await requireUserId();
+
   // Update Quote status
   const { error } = await supabase.from('quotes').update({ status: 'accepted' }).eq('id', quoteId);
   if (error) throw error;
 
-  // Update RFQ status
-  await supabase.from('rfqs').update({ status: 'accepted' }).eq('id', rfqId);
+  // Update RFQ status (scoped to buyer)
+  await supabase
+    .from('rfqs')
+    .update({ status: 'accepted' })
+    .eq('id', rfqId)
+    .eq('buyer_id', userId);
 
   // Fetch Quote data
   const { data: quote } = await supabase.from('quotes').select('*').eq('id', quoteId).single();
@@ -351,7 +474,7 @@ export async function acceptQuote(quoteId: string, rfqId: string) {
     ? `$${quote.total_value.toLocaleString()}`
     : rfq?.value || '$0';
 
-  // Automatically insert Order into database
+  // Create order stamped with this buyer's ID
   const orderId = await insertOrder({
     product,
     buyer,
@@ -363,6 +486,7 @@ export async function acceptQuote(quoteId: string, rfqId: string) {
     quoteId,
     freightCost: quote?.freight_cost || 0,
     dutiesCost: quote?.doc_fee || 0,
+    buyerId: userId, // Pass explicitly to avoid second auth.getUser() call
   });
 
   // Link Order ID back to quote
@@ -397,8 +521,16 @@ export async function rejectQuote(quoteId: string, rfqId: string) {
 export async function confirmDelivery(shipmentId: string, orderId: string) {
   const supabase = getSupabase();
   if (!supabase) throw new Error('No Supabase client');
+  const userId = await requireUserId();
+
   await supabase.from('shipments').update({ delivery_confirmed: true }).eq('id', shipmentId);
-  await supabase.from('orders').update({ stage: 'delivered' }).eq('id', orderId);
+  // Scoped update — buyer can only mark their own orders delivered
+  await supabase
+    .from('orders')
+    .update({ stage: 'delivered' })
+    .eq('id', orderId)
+    .eq('buyer_id', userId);
+
   await supabase.from('notifications').insert({
     target_dashboard: 'admin',
     order_id: orderId,
@@ -411,7 +543,15 @@ export async function confirmDelivery(shipmentId: string, orderId: string) {
 export async function markNotificationRead(id: number) {
   const supabase = getSupabase();
   if (!supabase) return;
-  await supabase.from('notifications').update({ read: true }).eq('id', id);
+  const userId = await getUserId();
+  if (!userId) return;
+
+  // Only mark notifications that belong to this buyer
+  await supabase
+    .from('notifications')
+    .update({ read: true })
+    .eq('id', id)
+    .eq('buyer_id', userId);
 }
 
 export async function createNotification(params: {
@@ -421,9 +561,11 @@ export async function createNotification(params: {
   message: string;
   orderId?: string;
   actionUrl?: string;
+  buyerId?: string; // Required when targetDashboard = 'buyer'
 }) {
   const supabase = getSupabase();
   if (!supabase) return;
+
   const { error } = await supabase.from('notifications').insert({
     target_dashboard: params.targetDashboard,
     type: params.type,
@@ -431,6 +573,7 @@ export async function createNotification(params: {
     message: params.message,
     order_id: params.orderId,
     action_url: params.actionUrl,
+    buyer_id: params.buyerId || null,
     read: false,
   });
   if (error) throw error;
@@ -439,10 +582,24 @@ export async function createNotification(params: {
 export async function fetchBuyerMilestones() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
+  // Milestones linked to this buyer's orders
+  const { data: orderIds } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('buyer_id', userId);
+
+  const ids = (orderIds || []).map((o: any) => o.id);
+  if (ids.length === 0) return [];
+
   const { data, error } = await supabase
     .from('milestones')
     .select('*')
+    .in('order_id', ids)
     .order('created_at', { ascending: true });
+
   if (error) {
     console.error('fetchBuyerMilestones:', error);
     return [];
@@ -471,7 +628,7 @@ export async function fetchCurrentBuyerProfile() {
   const { data, error } = await supabase
     .from('buyer_profiles')
     .select('*')
-    .eq('id', user.id)
+    .eq('id', user.id) // Scoped to current user's own profile
     .maybeSingle();
 
   if (error) {
@@ -489,11 +646,14 @@ export async function saveCurrentBuyerProfile(profile: any) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const { error } = await supabase.from('buyer_profiles').upsert({
-    id: user.id,
-    ...profile,
-    updated_at: new Date().toISOString(),
-  });
+  const { error } = await supabase.from('buyer_profiles').upsert(
+    {
+      id: user.id, // Always use auth user ID as PK
+      ...profile,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' }
+  );
 
   if (error) throw error;
 }
@@ -501,12 +661,23 @@ export async function saveCurrentBuyerProfile(profile: any) {
 export async function fetchBuyerMessages() {
   const supabase = getSupabase();
   if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
+  // Messages where the buyer is participant, scoped by user context
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const userEmail = user?.email || '';
+  const userHandle = userEmail.split('@')[0];
+
   const { data, error } = await supabase
     .from('messages')
     .select('*')
-    .or('to_name.eq.Buyer,from_name.eq.Admin,type.eq.buyer')
+    .or(`to_name.eq.${userHandle},from_name.eq.${userHandle},type.eq.buyer`)
     .order('created_at', { ascending: false })
     .limit(50);
+
   if (error) {
     console.error('fetchBuyerMessages:', error);
     return [];
@@ -531,7 +702,9 @@ export async function sendBuyerMessage(msg: { orderId?: string; subject: string;
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const fromName = user?.email?.split('@')[0] || 'Enterprise Buyer';
+  if (!user) throw new Error('Not authenticated');
+
+  const fromName = user.email?.split('@')[0] || 'Enterprise Buyer';
 
   const { error } = await supabase.from('messages').insert({
     id: `MSG-${Date.now()}`,

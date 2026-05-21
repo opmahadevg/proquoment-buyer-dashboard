@@ -32,13 +32,22 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
   const { user } = useAuth();
 
   const refreshNotifications = useCallback(async () => {
-    if (!user) return;
+    // Never fetch without a known user — prevents cross-buyer data leaks
+    if (!user?.id) {
+      setNotifications([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
+
+      // Fetch ONLY this buyer's notifications (buyer_id = user.id).
+      // Also include admin_announcement broadcasts that have no specific buyer_id.
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('target_dashboard', 'buyer')
+        .or(`buyer_id.eq.${user.id},type.eq.admin_announcement`)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -62,10 +71,10 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [user, supabase]);
+  }, [user?.id, supabase]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user?.id) {
       setNotifications([]);
       setLoading(false);
       return;
@@ -73,12 +82,18 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
 
     refreshNotifications();
 
-    // Subscribe to notifications where target_dashboard = 'buyer'
+    // Realtime subscription — filtered to THIS buyer's rows only
     const channel = supabase
-      .channel('buyer-notifications-realtime')
+      .channel(`buyer-notifications-${user.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications' },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          // Server-side filter: only rows where buyer_id matches current user
+          filter: `buyer_id=eq.${user.id}`,
+        },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newRow = payload.new;
@@ -98,8 +113,6 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 if (prev.some((n) => n.id === mapped.id)) return prev;
                 return [mapped, ...prev];
               });
-
-              // Trigger toast notification
               toast.info(mapped.title, {
                 description: mapped.message,
                 duration: 5000,
@@ -107,20 +120,18 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             }
           } else if (payload.eventType === 'UPDATE') {
             const newRow = payload.new;
-            if (newRow.target_dashboard === 'buyer') {
-              setNotifications((prev) =>
-                prev.map((n) =>
-                  n.id === newRow.id
-                    ? {
-                        ...n,
-                        read: newRow.read ?? false,
-                        title: newRow.title,
-                        message: newRow.message,
-                      }
-                    : n
-                )
-              );
-            }
+            setNotifications((prev) =>
+              prev.map((n) =>
+                n.id === newRow.id
+                  ? {
+                      ...n,
+                      read: newRow.read ?? false,
+                      title: newRow.title,
+                      message: newRow.message,
+                    }
+                  : n
+              )
+            );
           } else if (payload.eventType === 'DELETE') {
             const deletedId = payload.old.id;
             setNotifications((prev) => prev.filter((n) => n.id !== deletedId));
@@ -132,17 +143,20 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, refreshNotifications, supabase]);
+  }, [user?.id, refreshNotifications, supabase]);
 
   const markAsRead = async (id: number) => {
     // Optimistic update
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
     try {
-      const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', id)
+        .eq('buyer_id', user!.id); // Scoped to own rows only
       if (error) throw error;
     } catch (err) {
       console.error('Failed to mark notification as read:', err);
-      // Revert on error
       refreshNotifications();
     }
   };
@@ -155,6 +169,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
         .from('notifications')
         .update({ read: true })
         .eq('target_dashboard', 'buyer')
+        .eq('buyer_id', user!.id) // Scoped to own rows only
         .eq('read', false);
       if (error) throw error;
     } catch (err) {

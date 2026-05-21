@@ -22,34 +22,43 @@ export interface StoredOrg {
   description: string;
 }
 
-const STORAGE_KEY = 'proquoment_org';
-const ORG_UPDATED_EVENT = 'proquoment_org_updated';
-
+// Production default: completely blank — new buyers start fresh
 export const DEFAULT_ORG: StoredOrg = {
-  name: "Honey's Org",
-  legalName: 'Honey Enterprises Pvt. Ltd.',
-  type: 'Private Limited Company',
-  industry: 'Textile & Apparel',
-  founded: '2018',
-  registrationNumber: 'REG-2018-HE-04421',
-  taxId: 'GSTIN: 27AABCH1234F1Z5',
-  website: 'https://honeysorg.com',
-  email: 'contact@honeysorg.com',
-  phone: '+91 98765 43210',
-  street: '42, Industrial Estate, Phase II',
-  city: 'Mumbai',
-  state: 'Maharashtra',
-  zip: '400072',
-  country: 'India',
-  teamSize: '12–50 employees',
-  description:
-    "Honey's Org is a sourcing and procurement company specialising in home textiles, apparel, and agricultural commodities. We connect global buyers with verified manufacturers across South Asia.",
+  name: '',
+  legalName: '',
+  type: '',
+  industry: '',
+  founded: '',
+  registrationNumber: '',
+  taxId: '',
+  website: '',
+  email: '',
+  phone: '',
+  street: '',
+  city: '',
+  state: '',
+  zip: '',
+  country: '',
+  teamSize: '',
+  description: '',
 };
 
-export function getStoredOrg(): StoredOrg {
+const ORG_UPDATED_EVENT = 'proquoment_org_updated';
+
+/** Returns the localStorage key scoped to a specific user ID */
+function storageKey(userId: string): string {
+  return `proquoment_org_${userId}`;
+}
+
+/**
+ * Reads org from localStorage — scoped to userId so different buyers
+ * never share cached profile data.
+ */
+export function getStoredOrg(userId?: string): StoredOrg {
   if (typeof window === 'undefined') return DEFAULT_ORG;
+  if (!userId) return DEFAULT_ORG;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId));
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<StoredOrg>;
       return { ...DEFAULT_ORG, ...parsed };
@@ -60,11 +69,14 @@ export function getStoredOrg(): StoredOrg {
   }
 }
 
-export async function saveOrg(org: StoredOrg): Promise<void> {
-  if (typeof window === 'undefined') return;
+/**
+ * Saves org to localStorage (scoped to userId) + Supabase.
+ */
+export async function saveOrg(org: StoredOrg, userId: string): Promise<void> {
+  if (typeof window === 'undefined' || !userId) return;
 
-  // Always save to localStorage first for instant UI feedback
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(org));
+  // Save to scoped localStorage key first (instant UI feedback)
+  localStorage.setItem(storageKey(userId), JSON.stringify(org));
 
   // Notify all listeners
   window.dispatchEvent(new Event(ORG_UPDATED_EVENT));
@@ -97,6 +109,19 @@ export async function saveOrg(org: StoredOrg): Promise<void> {
   } catch (err) {
     // localStorage already saved — graceful degradation
     console.error('Failed to save org to Supabase (localStorage fallback active):', err);
+  }
+}
+
+/**
+ * Clears all cached org data for a user — called on sign-out to prevent
+ * the next user who logs in on the same browser from seeing stale data.
+ */
+export function clearStoredOrg(userId: string): void {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    localStorage.removeItem(storageKey(userId));
+  } catch {
+    // ignore
   }
 }
 

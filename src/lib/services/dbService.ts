@@ -1,7 +1,6 @@
 'use client';
 
 import { createClient } from '@/lib/supabase/client';
-import { ALL_PRODUCT_DETAIL_DATA } from '@/lib/productDetailData';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -120,24 +119,6 @@ export interface DbOrganization {
   teamSize: string;
   description: string;
 }
-
-// ── Static demo products (always visible after login) ───────────────────────
-
-const STATIC_PRODUCTS: DbProduct[] = Object.values(ALL_PRODUCT_DETAIL_DATA).map((p) => ({
-  id: p.id,
-  name: p.name,
-  category: '',
-  description: '',
-  moq: '',
-  image: p.image,
-  imageAlt: p.imageAlt,
-  stage: p.stage as DbProduct['stage'],
-  status: 'No Updates' as DbProduct['status'],
-  updated: 'May 2, 2026',
-  ownerId: '',
-  organizationId: null,
-  isStatic: true,
-}));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -369,28 +350,36 @@ export const productService = {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return STATIC_PRODUCTS;
+
+    // Unauthenticated: return nothing (middleware redirects to login anyway)
+    if (!user) return [];
 
     try {
+      // Fetch only THIS buyer's products (buyer_id scoping + RLS as backup)
       const { data: productsData, error } = await supabase
         .from('products')
         .select('*')
+        .eq('buyer_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
         if (isSchemaError(error)) throw error;
-        return STATIC_PRODUCTS;
+        return [];
       }
 
-      // Fetch all related details to determine stage and status dynamically
+      // Fetch related data scoped to this buyer via RLS
       const [ordersRes, samplesRes, rfqsRes, notificationsRes] = await Promise.all([
-        supabase.from('orders').select('*'),
-        supabase.from('sample_orders').select('*'),
-        supabase.from('rfqs').select('*'),
-        supabase.from('notifications').select('*'),
+        supabase.from('orders').select('*').eq('buyer_id', user.id),
+        supabase.from('sample_orders').select('*').eq('buyer_id', user.id),
+        supabase.from('rfqs').select('*').eq('buyer_id', user.id),
+        supabase
+          .from('notifications')
+          .select('*')
+          .eq('buyer_id', user.id)
+          .eq('target_dashboard', 'buyer'),
       ]);
 
-      const supabaseProducts = (productsData || []).map((row) => {
+      return (productsData || []).map((row) => {
         const matchedOrders =
           ordersRes.data?.filter((o) => isProductMatch(o.product, row.name)) || [];
         const matchedSamples =
@@ -463,68 +452,53 @@ export const productService = {
           stage,
           status,
           updated: formatDate(row.created_at),
-          ownerId: '',
+          ownerId: user.id,
           organizationId: null,
           isStatic: false,
         };
       });
-
-      const supabaseNames = new Set(supabaseProducts.map((p) => p.name.toLowerCase()));
-      const staticFallback = STATIC_PRODUCTS.filter(
-        (p) => !supabaseNames.has(p.name.toLowerCase())
-      );
-      return [...supabaseProducts, ...staticFallback];
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
-      return STATIC_PRODUCTS;
+      return [];
     }
   },
 
   async getById(id: string): Promise<DbProduct | null> {
     const supabase = createClient();
-    const staticMatch = STATIC_PRODUCTS.find((p) => p.id === id);
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return staticMatch ?? null;
+    if (!user) return null;
 
     try {
+      // Fetch product scoped to this buyer
       const { data: productRow, error: productErr } = await supabase
         .from('products')
         .select('*')
         .eq('id', id)
+        .eq('buyer_id', user.id)
         .maybeSingle();
 
       if (productErr && isSchemaError(productErr)) throw productErr;
-
-      let matchedProduct = productRow;
-      if (!matchedProduct && staticMatch) {
-        const { data: matchedByName, error: nameErr } = await supabase
-          .from('products')
-          .select('*')
-          .eq('name', staticMatch.name)
-          .maybeSingle();
-        if (nameErr && isSchemaError(nameErr)) throw nameErr;
-        matchedProduct = matchedByName;
-      }
-
-      if (!matchedProduct) {
-        return staticMatch ?? null;
-      }
+      if (!productRow) return null;
 
       const [ordersRes, samplesRes, rfqsRes, notificationsRes] = await Promise.all([
-        supabase.from('orders').select('*'),
-        supabase.from('sample_orders').select('*'),
-        supabase.from('rfqs').select('*'),
-        supabase.from('notifications').select('*'),
+        supabase.from('orders').select('*').eq('buyer_id', user.id),
+        supabase.from('sample_orders').select('*').eq('buyer_id', user.id),
+        supabase.from('rfqs').select('*').eq('buyer_id', user.id),
+        supabase
+          .from('notifications')
+          .select('*')
+          .eq('buyer_id', user.id)
+          .eq('target_dashboard', 'buyer'),
       ]);
 
       const matchedOrders =
-        ordersRes.data?.filter((o) => isProductMatch(o.product, matchedProduct.name)) || [];
+        ordersRes.data?.filter((o) => isProductMatch(o.product, productRow.name)) || [];
       const matchedSamples =
-        samplesRes.data?.filter((s) => isProductMatch(s.product, matchedProduct.name)) || [];
+        samplesRes.data?.filter((s) => isProductMatch(s.product, productRow.name)) || [];
       const matchedRfqs =
-        rfqsRes.data?.filter((r) => isProductMatch(r.product, matchedProduct.name)) || [];
+        rfqsRes.data?.filter((r) => isProductMatch(r.product, productRow.name)) || [];
 
       // Determine Stage
       let stage: DbProduct['stage'] = 'Draft';
@@ -562,8 +536,8 @@ export const productService = {
           const isLinkedToOrder = matchedOrders.some((o) => o.id === n.order_id);
           const isLinkedToRfq = matchedRfqs.some((r) => r.id === n.order_id);
           const mentionsProduct =
-            n.message?.toLowerCase().includes(matchedProduct.name.toLowerCase()) ||
-            n.title?.toLowerCase().includes(matchedProduct.name.toLowerCase());
+            n.message?.toLowerCase().includes(productRow.name.toLowerCase()) ||
+            n.title?.toLowerCase().includes(productRow.name.toLowerCase());
           return isLinkedToOrder || isLinkedToRfq || mentionsProduct;
         }) || [];
 
@@ -582,23 +556,23 @@ export const productService = {
       }
 
       return {
-        id: matchedProduct.id,
-        name: matchedProduct.name,
-        category: matchedProduct.category || '',
-        description: matchedProduct.description || '',
-        moq: matchedProduct.moq || '',
-        image: getProductImage(matchedProduct.name, matchedProduct.image_url),
-        imageAlt: `${matchedProduct.name} product image`,
+        id: productRow.id,
+        name: productRow.name,
+        category: productRow.category || '',
+        description: productRow.description || '',
+        moq: productRow.moq || '',
+        image: getProductImage(productRow.name, productRow.image_url),
+        imageAlt: `${productRow.name} product image`,
         stage,
         status,
-        updated: formatDate(matchedProduct.created_at),
-        ownerId: '',
+        updated: formatDate(productRow.created_at),
+        ownerId: user.id,
         organizationId: null,
         isStatic: false,
       };
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
-      return staticMatch ?? null;
+      return null;
     }
   },
 
@@ -618,6 +592,7 @@ export const productService = {
           description: product.description,
           moq: product.moq,
           image_url: product.image,
+          buyer_id: user.id, // Always stamp buyer_id on write
           is_demo: false,
         },
         { onConflict: 'id' }
@@ -637,11 +612,19 @@ export const productService = {
 export const rfqService = {
   async getByProductId(productId: string): Promise<DbRfqSpec | null> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+
     try {
       const product = await productService.getById(productId);
       if (!product) return null;
 
-      const { data, error } = await supabase.from('rfqs').select('*');
+      const { data, error } = await supabase
+        .from('rfqs')
+        .select('*')
+        .eq('buyer_id', user.id); // Scoped to buyer
 
       if (error) {
         if (isSchemaError(error)) throw error;
@@ -671,11 +654,19 @@ export const rfqService = {
     notes: DbRfqSpec['manufacturingNotes']
   ): Promise<void> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
     try {
       const product = await productService.getById(productId);
       if (!product) return;
 
-      const { data } = await supabase.from('rfqs').select('*');
+      const { data } = await supabase
+        .from('rfqs')
+        .select('*')
+        .eq('buyer_id', user.id); // Scoped to buyer
 
       const matched = data?.find((row) => isProductMatch(row.product, product.name));
       if (matched) {
@@ -684,7 +675,8 @@ export const rfqService = {
         const { error } = await supabase
           .from('rfqs')
           .update({ specs: specsStr, description: descriptionStr })
-          .eq('id', matched.id);
+          .eq('id', matched.id)
+          .eq('buyer_id', user.id); // Scoped update
         if (error && isSchemaError(error)) throw error;
       }
     } catch (err: any) {
@@ -698,11 +690,19 @@ export const rfqService = {
 export const quoteService = {
   async getByProductId(productId: string): Promise<DbQuoteStep[]> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
     try {
       const product = await productService.getById(productId);
       if (!product) return [];
 
-      const { data: rfqs, error: rfqErr } = await supabase.from('rfqs').select('*');
+      const { data: rfqs, error: rfqErr } = await supabase
+        .from('rfqs')
+        .select('*')
+        .eq('buyer_id', user.id); // Scoped to buyer
       if (rfqErr && isSchemaError(rfqErr)) throw rfqErr;
 
       const matchedRfq = rfqs?.find((r) => isProductMatch(r.product, product.name));
@@ -802,11 +802,19 @@ export const quoteService = {
 export const orderService = {
   async getByProductId(productId: string): Promise<DbOrder[]> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
     try {
       const product = await productService.getById(productId);
       if (!product) return [];
 
-      const { data, error } = await supabase.from('orders').select('*');
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('buyer_id', user.id); // Scoped to buyer
 
       if (error) {
         if (isSchemaError(error)) throw error;
@@ -845,11 +853,19 @@ export const sampleService = {
     productId: string
   ): Promise<{ samples: DbSample[]; references: DbSample[] }> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { samples: [], references: [] };
+
     try {
       const product = await productService.getById(productId);
       if (!product) return { samples: [], references: [] };
 
-      const { data, error } = await supabase.from('sample_orders').select('*');
+      const { data, error } = await supabase
+        .from('sample_orders')
+        .select('*')
+        .eq('buyer_id', user.id); // Scoped to buyer
 
       if (error) {
         if (isSchemaError(error)) throw error;
@@ -889,11 +905,20 @@ export const sampleService = {
 export const fileService = {
   async getByProductId(productId: string): Promise<DbProductFile[]> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
     try {
       const product = await productService.getById(productId);
       if (!product) return [];
 
-      const { data: orders, error: orderErr } = await supabase.from('orders').select('*');
+      // Fetch only this buyer's orders (RLS enforces buyer_id already)
+      const { data: orders, error: orderErr } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('buyer_id', user.id);
       if (orderErr && isSchemaError(orderErr)) throw orderErr;
 
       const matchedOrders =
@@ -924,7 +949,8 @@ export const fileService = {
 
       const { data: sampleOrders, error: sampleErr } = await supabase
         .from('sample_orders')
-        .select('*');
+        .select('*')
+        .eq('buyer_id', user.id); // Scoped
       if (sampleErr && isSchemaError(sampleErr)) throw sampleErr;
 
       const matchedSamples =
@@ -956,13 +982,18 @@ export const updateService = {
     productId: string
   ): Promise<{ tasks: DbProductUpdate[]; updates: DbProductUpdate[] }> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { tasks: [], updates: [] };
+
     try {
       const product = await productService.getById(productId);
       if (!product) return { tasks: [], updates: [] };
 
       const [ordersRes, rfqsRes] = await Promise.all([
-        supabase.from('orders').select('*'),
-        supabase.from('rfqs').select('*'),
+        supabase.from('orders').select('*').eq('buyer_id', user.id),
+        supabase.from('rfqs').select('*').eq('buyer_id', user.id),
       ]);
 
       const matchedOrders =
@@ -1008,9 +1039,12 @@ export const updateService = {
         }
       }
 
+      // Notifications scoped to this buyer
       const { data: notifications, error: notifErr } = await supabase
         .from('notifications')
-        .select('*');
+        .select('*')
+        .eq('buyer_id', user.id)
+        .eq('target_dashboard', 'buyer');
       if (notifErr && isSchemaError(notifErr)) throw notifErr;
 
       if (notifications) {
@@ -1057,7 +1091,13 @@ export const updateService = {
 export const activityService = {
   async getRecent(limit = 10): Promise<DbActivityItem[]> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
     try {
+      // activity_log scoped to current user's orders/rfqs via a join-style filter
       const { data, error } = await supabase
         .from('activity_log')
         .select('*')
@@ -1098,7 +1138,7 @@ export const organizationService = {
       const { data, error } = await supabase
         .from('buyer_profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', user.id) // Always scoped to current user
         .maybeSingle();
 
       if (error) {
@@ -1135,6 +1175,11 @@ export const organizationService = {
 
   async update(org: DbOrganization): Promise<void> {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
     try {
       const { error } = await supabase
         .from('buyer_profiles')
@@ -1157,7 +1202,7 @@ export const organizationService = {
           team_size: org.teamSize,
           description: org.description,
         })
-        .eq('id', org.id);
+        .eq('id', user.id); // Always scoped to current user
 
       if (error && isSchemaError(error)) throw error;
     } catch (err: any) {

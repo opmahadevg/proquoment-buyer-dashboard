@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { clearStoredOrg } from '@/lib/orgStore';
 
 const AuthContext = createContext<any>({});
 
@@ -18,6 +19,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
+  // Track the previous user ID so we can clear their data on sign-out
+  const prevUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -31,12 +34,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      prevUserIdRef.current = session?.user?.id ?? null;
       setLoading(false);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === 'SIGNED_OUT') {
+        // Clear per-user localStorage cache for the user who just signed out
+        if (prevUserIdRef.current) {
+          clearStoredOrg(prevUserIdRef.current);
+        }
+        prevUserIdRef.current = null;
+      } else if (session?.user) {
+        prevUserIdRef.current = session.user.id;
+      }
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -57,10 +70,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       options: {
         data: metadata,
         emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
-        // This tells Supabase where to redirect after email click
       },
     });
     if (error) throw error;
+
+    // Bootstrap an empty buyer_profiles row immediately after signup
+    // (the DB trigger also does this, but we do it here as a safety net)
+    if (data?.user) {
+      try {
+        await getSupabase()
+          .from('buyer_profiles')
+          .upsert(
+            {
+              id: data.user.id,
+              email: data.user.email,
+              verification_status: 'pending',
+              // Pre-fill organization_name from signup form if provided
+              organization_name: (metadata as any)?.company || '',
+            },
+            { onConflict: 'id', ignoreDuplicates: true }
+          );
+      } catch {
+        // Non-fatal — DB trigger handles this as fallback
+      }
+    }
+
     return data;
   };
 
@@ -76,6 +110,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     const { error } = await getSupabase().auth.signOut();
     if (error) throw error;
+    // clearStoredOrg is also called in the onAuthStateChange SIGNED_OUT handler
   };
 
   const getCurrentUser = async () => {
