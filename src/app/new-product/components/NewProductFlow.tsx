@@ -1276,7 +1276,7 @@ function BuilderStep({ productText, productName }: { productText: string; produc
     });
     const title = rfqTitle || rfq.productName || deriveProductName(productText);
 
-    saveProduct({
+    await saveProduct({
       id: `prod-rfq-${Date.now()}`,
       name: title,
       category: rfq.category,
@@ -1613,7 +1613,7 @@ export default function NewProductFlow() {
         year: 'numeric',
       });
       const title = deriveProductName(productText) || 'New Product';
-      saveProduct({
+      await saveProduct({
         id: `prod-rfq-${Date.now()}`,
         name: title,
         category: '',
