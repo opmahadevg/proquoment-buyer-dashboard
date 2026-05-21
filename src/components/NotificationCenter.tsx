@@ -2,7 +2,18 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { Bell, CheckCheck, Trash2, Circle, ExternalLink, FileText, Info, ShieldAlert, Package, MessageSquare } from 'lucide-react';
+import {
+  Bell,
+  CheckCheck,
+  Trash2,
+  Circle,
+  ExternalLink,
+  FileText,
+  Info,
+  ShieldAlert,
+  Package,
+  MessageSquare,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 function cn(...classes: (string | undefined | null | boolean)[]) {
@@ -87,7 +98,7 @@ export default function NotificationCenter() {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl border border-gray-200 bg-white shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden transform origin-top-right transition-all duration-200">
+        <div className="absolute left-0 mt-2 w-80 sm:w-96 rounded-xl border border-gray-200 bg-white shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden transform origin-top-left transition-all duration-200">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
             <span className="font-semibold text-sm text-gray-800">Notifications</span>
@@ -115,24 +126,23 @@ export default function NotificationCenter() {
                   key={n.id}
                   onClick={() => handleNotificationClick(n)}
                   className={cn(
-                    "flex gap-3 px-4 py-3 cursor-pointer transition-colors duration-150",
-                    n.read ? "bg-white hover:bg-gray-50" : "bg-blue-50/20 hover:bg-blue-50/40"
+                    'flex gap-3 px-4 py-3 cursor-pointer transition-colors duration-150',
+                    n.read ? 'bg-white hover:bg-gray-50' : 'bg-blue-50/20 hover:bg-blue-50/40'
                   )}
                 >
                   <div className="flex-shrink-0 mt-0.5">
-                    <div className={cn(
-                      "p-1.5 rounded-lg",
-                      n.read ? "bg-gray-100" : "bg-blue-50"
-                    )}>
+                    <div className={cn('p-1.5 rounded-lg', n.read ? 'bg-gray-100' : 'bg-blue-50')}>
                       {getNotificationIcon(n.type)}
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start gap-1 mb-0.5">
-                      <p className={cn(
-                        "text-xs text-gray-800 truncate",
-                        n.read ? "font-medium" : "font-semibold"
-                      )}>
+                      <p
+                        className={cn(
+                          'text-xs text-gray-800 truncate',
+                          n.read ? 'font-medium' : 'font-semibold'
+                        )}
+                      >
                         {n.title}
                       </p>
                       <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">

@@ -1,7 +1,14 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Package, FileText, CheckCircle, AlertTriangle, MessageSquare, Loader2 } from 'lucide-react';
+import {
+  Package,
+  FileText,
+  CheckCircle,
+  AlertTriangle,
+  MessageSquare,
+  Loader2,
+} from 'lucide-react';
 import { activityService, DbActivityItem } from '@/lib/services/dbService';
 import { getStoredProducts } from '@/lib/productStore';
 
@@ -18,7 +25,8 @@ const STATIC_FALLBACK: DbActivityItem[] = [
     id: 'static-1',
     activityType: 'quote',
     title: 'Quote received: Ceramic Plate 26cm',
-    description: '3 suppliers responded to your RFQ. Best price: $1.85/unit from Shenzhen Ceramics Co.',
+    description:
+      '3 suppliers responded to your RFQ. Best price: $1.85/unit from Shenzhen Ceramics Co.',
     productId: null,
     createdAt: new Date(Date.now() - 1000 * 60 * 32).toISOString(),
   },
@@ -92,11 +100,16 @@ export default function ActivityFeed({ limit = 10 }: ActivityFeedProps) {
           .slice(0, 5)
           .map((n: any) => ({
             id: `notif-${n.id}`,
-            activityType: n.type === 'quote_accepted' || n.type === 'quote_sent' ? 'quote'
-              : n.type === 'stage_update' ? 'order'
-              : n.type === 'qc_update' ? 'action'
-              : n.type === 'message_received' ? 'message'
-              : 'product',
+            activityType:
+              n.type === 'quote_accepted' || n.type === 'quote_sent'
+                ? 'quote'
+                : n.type === 'stage_update'
+                  ? 'order'
+                  : n.type === 'qc_update'
+                    ? 'action'
+                    : n.type === 'message_received'
+                      ? 'message'
+                      : 'product',
             title: n.title,
             description: n.message,
             productId: null,
@@ -111,16 +124,18 @@ export default function ActivityFeed({ limit = 10 }: ActivityFeedProps) {
           const localActivities: DbActivityItem[] = localProducts.slice(0, 3).map((p, i) => ({
             id: `local-${p.id}`,
             activityType: i === 0 ? 'product' : i === 1 ? 'quote' : 'action',
-            title: i === 0
-              ? `RFQ submitted: ${p.name}`
-              : i === 1
-                ? `Quotes incoming: ${p.name}`
-                : `Review required: ${p.name}`,
-            description: i === 0
-              ? `Your RFQ has been sent to matching suppliers.`
-              : i === 1
-                ? `Suppliers are preparing quotes. Check back soon.`
-                : `Supplier response needs your review before proceeding.`,
+            title:
+              i === 0
+                ? `RFQ submitted: ${p.name}`
+                : i === 1
+                  ? `Quotes incoming: ${p.name}`
+                  : `Review required: ${p.name}`,
+            description:
+              i === 0
+                ? `Your RFQ has been sent to matching suppliers.`
+                : i === 1
+                  ? `Suppliers are preparing quotes. Check back soon.`
+                  : `Supplier response needs your review before proceeding.`,
             productId: p.id,
             createdAt: p.updated || new Date().toISOString(),
           }));
@@ -181,12 +196,16 @@ export default function ActivityFeed({ limit = 10 }: ActivityFeedProps) {
             onClick={() => handleItemClick(item)}
             className="flex items-start gap-3 py-3.5 border-b border-[var(--border)] last:border-0 hover:bg-[var(--muted)]/40 px-1 rounded transition-colors cursor-pointer"
           >
-            <div className={`w-8 h-8 rounded-lg ${config?.iconBg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+            <div
+              className={`w-8 h-8 rounded-lg ${config?.iconBg} flex items-center justify-center flex-shrink-0 mt-0.5`}
+            >
               <Icon size={15} className={config?.iconColor} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-[var(--foreground)]">{item?.title}</p>
-              <p className="text-xs text-[var(--muted-foreground)] mt-0.5 line-clamp-2">{item?.description}</p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5 line-clamp-2">
+                {item?.description}
+              </p>
             </div>
             <span className="text-xs text-[var(--muted-foreground)] flex-shrink-0 mt-0.5">
               {timeAgo(item?.createdAt)}

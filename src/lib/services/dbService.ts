@@ -139,7 +139,212 @@ const STATIC_PRODUCTS: DbProduct[] = Object.values(ALL_PRODUCT_DETAIL_DATA).map(
   isStatic: true,
 }));
 
-// ── Helper ─────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function isProductMatch(
+  prodName1: string | null | undefined,
+  prodName2: string | null | undefined
+): boolean {
+  if (!prodName1 || !prodName2) return false;
+
+  const n1 = prodName1.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const n2 = prodName2.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (n1 === n2) return true;
+  if (n1.includes(n2) || n2.includes(n1)) return true;
+
+  // Word-based matching for fuzzy correlation
+  const getWords = (s: string) =>
+    s
+      .toLowerCase()
+      .split(/[\s\-—–,().]+/)
+      .filter(
+        (w) => w.length > 2 && !['and', 'for', 'set', 'bulk', 'pcs', 'pieces', 'grade'].includes(w)
+      );
+
+  const w1 = getWords(prodName1);
+  const w2 = getWords(prodName2);
+
+  const intersection = w1.filter((w) => w2.includes(w));
+  if (intersection.length >= 2) return true;
+  if (intersection.length >= 1 && (w1.length === 1 || w2.length === 1)) return true;
+
+  // Fallback special hardcoded matches for the database demo data
+  const normalizedMatches: Record<string, string[]> = {
+    steelpipes: ['steelpipesgradea', 'steelpipesgradea'],
+    gatevalves: ['gatevalvesdn50dn200', 'gatevalvesdn50', 'industrialvalvesdn50'],
+    hydraulicfittings: ['hydraulicfittingsset', 'hydraulicfittingsassortment', 'hydraulicfittings'],
+    stainlesssteelflanges: ['stainlesssteelflanges316l', 'stainlesssteelflanges', 'ssflanges316l'],
+    butterflyvalves: ['butterflyvalvespn10'],
+    hdpepipes: ['hdpepipessdr11', 'hdpepipesforwatersupply'],
+    blackpuffedjackets: ['blackpuffedjackets'],
+    cottonacblankets: ['cottonacblanketsbulkpack2000pieces'],
+    kingsizeplainwhitecottonbedsheets: ['kingsizeplainwhitecottonbedsheets'],
+    organiccottontotebags: ['organiccottontotebags500pcs'],
+    greencardamoms: ['greencardamoms6mmbulk2tonnes'],
+  };
+
+  const key1 = Object.keys(normalizedMatches).find((k) => n1.includes(k));
+  const key2 = Object.keys(normalizedMatches).find((k) => n2.includes(k));
+  if (key1 && key2 && key1 === key2) return true;
+
+  return false;
+}
+
+function getOrderSteps(
+  stage: string | null | undefined
+): { id: string; label: string; done: boolean }[] {
+  const stepsDef = [
+    {
+      label: 'PO Issued',
+      stages: [
+        'po_issued',
+        'bulk_order',
+        'production',
+        'qc_inspection',
+        'freight_booking',
+        'freight',
+        'customs_clearance',
+        'delivered',
+        'closed',
+      ],
+    },
+    {
+      label: 'Production',
+      stages: [
+        'production',
+        'qc_inspection',
+        'freight_booking',
+        'freight',
+        'customs_clearance',
+        'delivered',
+        'closed',
+      ],
+    },
+    {
+      label: 'Quality Check',
+      stages: [
+        'qc_inspection',
+        'freight_booking',
+        'freight',
+        'customs_clearance',
+        'delivered',
+        'closed',
+      ],
+    },
+    {
+      label: 'Shipped',
+      stages: ['freight_booking', 'freight', 'customs_clearance', 'delivered', 'closed'],
+    },
+    { label: 'Delivered', stages: ['delivered', 'closed'] },
+  ];
+
+  const stageLower = stage ? stage.toLowerCase() : '';
+  return stepsDef.map((step, idx) => ({
+    id: `step-${idx + 1}`,
+    label: step.label,
+    done: step.stages.includes(stageLower),
+  }));
+}
+
+function getOrderStatusDetails(stage: string | null | undefined): {
+  status: string;
+  color: string;
+} {
+  const s = stage ? stage.toLowerCase() : '';
+  switch (s) {
+    case 'po_issued':
+    case 'bulk_order':
+      return { status: 'PO Issued', color: 'text-amber-600 bg-amber-50' };
+    case 'production':
+      return { status: 'In Production', color: 'text-amber-600 bg-amber-50' };
+    case 'qc_inspection':
+      return { status: 'Quality Check', color: 'text-blue-600 bg-blue-50' };
+    case 'freight_booking':
+    case 'freight':
+    case 'customs_clearance':
+      return { status: 'Shipped', color: 'text-green-600 bg-green-50' };
+    case 'delivered':
+    case 'closed':
+      return { status: 'Delivered', color: 'text-gray-600 bg-gray-100' };
+    default:
+      return { status: stage || 'Pending', color: 'text-gray-600 bg-gray-100' };
+  }
+}
+
+function getProductImage(name: string, imageUrl: string | null): string {
+  if (imageUrl) return imageUrl;
+  const n = name.toLowerCase();
+  if (n.includes('pipe')) {
+    return 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122';
+  }
+  if (n.includes('valve')) {
+    return 'https://images.unsplash.com/photo-1581092160607-ee22621dd758';
+  }
+  if (n.includes('fitting')) {
+    return 'https://images.unsplash.com/photo-1618090584176-7132b9911657';
+  }
+  if (n.includes('flange')) {
+    return 'https://images.unsplash.com/photo-1535813547-99c456a41d4a';
+  }
+  return 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d';
+}
+
+function parseSpecs(
+  specsStr: string | null | undefined
+): { label: string; value: string; pending?: boolean }[] {
+  if (!specsStr) return [];
+  try {
+    const parsed = JSON.parse(specsStr);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item: any) => ({
+        label: item.label || item.name || 'Specification',
+        value: item.value || String(item),
+        pending: item.pending ?? false,
+      }));
+    }
+    if (typeof parsed === 'object') {
+      return Object.entries(parsed).map(([key, val]) => ({
+        label: key,
+        value: String(val),
+        pending: false,
+      }));
+    }
+  } catch (e) {
+    // Not JSON
+  }
+
+  return specsStr.split(',').map((part, index) => {
+    const trimmed = part.trim();
+    if (trimmed.includes(':')) {
+      const colIdx = trimmed.indexOf(':');
+      return {
+        label: trimmed.substring(0, colIdx).trim(),
+        value: trimmed.substring(colIdx + 1).trim(),
+        pending: false,
+      };
+    }
+    return {
+      label: `Spec ${index + 1}`,
+      value: trimmed,
+      pending: false,
+    };
+  });
+}
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
 
 function isSchemaError(error: any): boolean {
   if (!error) return false;
@@ -161,11 +366,13 @@ function isSchemaError(error: any): boolean {
 export const productService = {
   async getAll(): Promise<DbProduct[]> {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return STATIC_PRODUCTS;
 
     try {
-      const { data, error } = await supabase
+      const { data: productsData, error } = await supabase
         .from('products')
         .select('*')
         .order('created_at', { ascending: false });
@@ -175,25 +382,97 @@ export const productService = {
         return STATIC_PRODUCTS;
       }
 
-      const supabaseProducts = (data || []).map((row) => ({
-        id: row.id,
-        name: row.name,
-        category: row.category || '',
-        description: row.description || '',
-        moq: row.moq || '',
-        image: row.image || '',
-        imageAlt: row.image_alt || '',
-        stage: row.stage,
-        status: row.product_status,
-        updated: row.updated_at || '',
-        ownerId: row.owner_id,
-        organizationId: row.organization_id,
-        isStatic: row.is_static,
-      }));
+      // Fetch all related details to determine stage and status dynamically
+      const [ordersRes, samplesRes, rfqsRes, notificationsRes] = await Promise.all([
+        supabase.from('orders').select('*'),
+        supabase.from('sample_orders').select('*'),
+        supabase.from('rfqs').select('*'),
+        supabase.from('notifications').select('*'),
+      ]);
 
-      // Merge: Supabase products first (user-created), then static ones not already present
-      const supabaseIds = new Set(supabaseProducts.map((p) => p.id));
-      const staticFallback = STATIC_PRODUCTS.filter((p) => !supabaseIds.has(p.id));
+      const supabaseProducts = (productsData || []).map((row) => {
+        const matchedOrders =
+          ordersRes.data?.filter((o) => isProductMatch(o.product, row.name)) || [];
+        const matchedSamples =
+          samplesRes.data?.filter((s) => isProductMatch(s.product, row.name)) || [];
+        const matchedRfqs = rfqsRes.data?.filter((r) => isProductMatch(r.product, row.name)) || [];
+
+        // Determine Stage
+        let stage: DbProduct['stage'] = 'Draft';
+        if (matchedOrders.some((o) => ['delivered', 'closed'].includes(o.stage?.toLowerCase()))) {
+          stage = 'Completed';
+        } else if (
+          matchedOrders.some((o) =>
+            [
+              'production',
+              'qc_inspection',
+              'freight_booking',
+              'freight',
+              'customs_clearance',
+              'bulk_order',
+              'po_issued',
+            ].includes(o.stage?.toLowerCase())
+          )
+        ) {
+          stage = 'Production';
+        } else if (
+          matchedOrders.some((o) => o.stage?.toLowerCase() === 'sample_approval') ||
+          matchedSamples.length > 0
+        ) {
+          stage = 'Sampling';
+        } else if (matchedRfqs.some((r) => r.status?.toLowerCase() === 'converted')) {
+          stage = 'Sampling';
+        } else if (matchedRfqs.length > 0) {
+          stage = 'Quoting';
+        }
+
+        // Determine Status
+        let status: DbProduct['status'] = 'No Updates';
+        const matchedNotification =
+          notificationsRes.data?.filter((n) => {
+            const isLinkedToOrder = matchedOrders.some((o) => o.id === n.order_id);
+            const isLinkedToRfq = matchedRfqs.some((r) => r.id === n.order_id);
+            const mentionsProduct =
+              n.message?.toLowerCase().includes(row.name.toLowerCase()) ||
+              n.title?.toLowerCase().includes(row.name.toLowerCase());
+            return isLinkedToOrder || isLinkedToRfq || mentionsProduct;
+          }) || [];
+
+        const unread = matchedNotification.filter((n) => !n.read);
+        if (unread.length > 0) {
+          const hasAction = unread.some(
+            (n) =>
+              n.title?.toLowerCase().includes('action') ||
+              n.title?.toLowerCase().includes('hold') ||
+              n.title?.toLowerCase().includes('alert') ||
+              n.title?.toLowerCase().includes('urgently') ||
+              n.message?.toLowerCase().includes('required') ||
+              n.message?.toLowerCase().includes('urgent')
+          );
+          status = hasAction ? 'Action Required' : 'New Update';
+        }
+
+        return {
+          id: row.id,
+          name: row.name,
+          category: row.category || '',
+          description: row.description || '',
+          moq: row.moq || '',
+          image: getProductImage(row.name, row.image_url),
+          imageAlt: `${row.name} product image`,
+          stage,
+          status,
+          updated: formatDate(row.created_at),
+          ownerId: '',
+          organizationId: null,
+          isStatic: false,
+        };
+      });
+
+      const supabaseNames = new Set(supabaseProducts.map((p) => p.name.toLowerCase()));
+      const staticFallback = STATIC_PRODUCTS.filter(
+        (p) => !supabaseNames.has(p.name.toLowerCase())
+      );
       return [...supabaseProducts, ...staticFallback];
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
@@ -203,40 +482,119 @@ export const productService = {
 
   async getById(id: string): Promise<DbProduct | null> {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    // Check static products first (available with or without auth)
     const staticMatch = STATIC_PRODUCTS.find((p) => p.id === id);
-
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return staticMatch ?? null;
 
     try {
-      const { data, error } = await supabase
+      const { data: productRow, error: productErr } = await supabase
         .from('products')
         .select('*')
         .eq('id', id)
         .maybeSingle();
 
-      if (error) {
-        if (isSchemaError(error)) throw error;
+      if (productErr && isSchemaError(productErr)) throw productErr;
+
+      let matchedProduct = productRow;
+      if (!matchedProduct && staticMatch) {
+        const { data: matchedByName, error: nameErr } = await supabase
+          .from('products')
+          .select('*')
+          .eq('name', staticMatch.name)
+          .maybeSingle();
+        if (nameErr && isSchemaError(nameErr)) throw nameErr;
+        matchedProduct = matchedByName;
+      }
+
+      if (!matchedProduct) {
         return staticMatch ?? null;
       }
-      if (!data) return staticMatch ?? null;
+
+      const [ordersRes, samplesRes, rfqsRes, notificationsRes] = await Promise.all([
+        supabase.from('orders').select('*'),
+        supabase.from('sample_orders').select('*'),
+        supabase.from('rfqs').select('*'),
+        supabase.from('notifications').select('*'),
+      ]);
+
+      const matchedOrders =
+        ordersRes.data?.filter((o) => isProductMatch(o.product, matchedProduct.name)) || [];
+      const matchedSamples =
+        samplesRes.data?.filter((s) => isProductMatch(s.product, matchedProduct.name)) || [];
+      const matchedRfqs =
+        rfqsRes.data?.filter((r) => isProductMatch(r.product, matchedProduct.name)) || [];
+
+      // Determine Stage
+      let stage: DbProduct['stage'] = 'Draft';
+      if (matchedOrders.some((o) => ['delivered', 'closed'].includes(o.stage?.toLowerCase()))) {
+        stage = 'Completed';
+      } else if (
+        matchedOrders.some((o) =>
+          [
+            'production',
+            'qc_inspection',
+            'freight_booking',
+            'freight',
+            'customs_clearance',
+            'bulk_order',
+            'po_issued',
+          ].includes(o.stage?.toLowerCase())
+        )
+      ) {
+        stage = 'Production';
+      } else if (
+        matchedOrders.some((o) => o.stage?.toLowerCase() === 'sample_approval') ||
+        matchedSamples.length > 0
+      ) {
+        stage = 'Sampling';
+      } else if (matchedRfqs.some((r) => r.status?.toLowerCase() === 'converted')) {
+        stage = 'Sampling';
+      } else if (matchedRfqs.length > 0) {
+        stage = 'Quoting';
+      }
+
+      // Determine Status
+      let status: DbProduct['status'] = 'No Updates';
+      const matchedNotification =
+        notificationsRes.data?.filter((n) => {
+          const isLinkedToOrder = matchedOrders.some((o) => o.id === n.order_id);
+          const isLinkedToRfq = matchedRfqs.some((r) => r.id === n.order_id);
+          const mentionsProduct =
+            n.message?.toLowerCase().includes(matchedProduct.name.toLowerCase()) ||
+            n.title?.toLowerCase().includes(matchedProduct.name.toLowerCase());
+          return isLinkedToOrder || isLinkedToRfq || mentionsProduct;
+        }) || [];
+
+      const unread = matchedNotification.filter((n) => !n.read);
+      if (unread.length > 0) {
+        const hasAction = unread.some(
+          (n) =>
+            n.title?.toLowerCase().includes('action') ||
+            n.title?.toLowerCase().includes('hold') ||
+            n.title?.toLowerCase().includes('alert') ||
+            n.title?.toLowerCase().includes('urgently') ||
+            n.message?.toLowerCase().includes('required') ||
+            n.message?.toLowerCase().includes('urgent')
+        );
+        status = hasAction ? 'Action Required' : 'New Update';
+      }
 
       return {
-        id: data.id,
-        name: data.name,
-        category: data.category || '',
-        description: data.description || '',
-        moq: data.moq || '',
-        image: data.image || '',
-        imageAlt: data.image_alt || '',
-        stage: data.stage,
-        status: data.product_status,
-        updated: data.updated_at || '',
-        ownerId: data.owner_id,
-        organizationId: data.organization_id,
-        isStatic: data.is_static,
+        id: matchedProduct.id,
+        name: matchedProduct.name,
+        category: matchedProduct.category || '',
+        description: matchedProduct.description || '',
+        moq: matchedProduct.moq || '',
+        image: getProductImage(matchedProduct.name, matchedProduct.image_url),
+        imageAlt: `${matchedProduct.name} product image`,
+        stage,
+        status,
+        updated: formatDate(matchedProduct.created_at),
+        ownerId: '',
+        organizationId: null,
+        isStatic: false,
       };
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
@@ -246,15 +604,10 @@ export const productService = {
 
   async save(product: Omit<DbProduct, 'ownerId' | 'organizationId' | 'isStatic'>): Promise<void> {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
-
-    // Get user's org
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .maybeSingle();
 
     try {
       const { error } = await supabase.from('products').upsert(
@@ -264,14 +617,8 @@ export const productService = {
           category: product.category,
           description: product.description,
           moq: product.moq,
-          image: product.image,
-          image_alt: product.imageAlt,
-          stage: product.stage,
-          product_status: product.status,
-          updated_at: product.updated,
-          owner_id: user.id,
-          organization_id: profile?.organization_id || null,
-          is_static: false,
+          image_url: product.image,
+          is_demo: false,
         },
         { onConflict: 'id' }
       );
@@ -291,23 +638,26 @@ export const rfqService = {
   async getByProductId(productId: string): Promise<DbRfqSpec | null> {
     const supabase = createClient();
     try {
-      const { data, error } = await supabase
-        .from('rfq_specs')
-        .select('*')
-        .eq('product_id', productId)
-        .maybeSingle();
+      const product = await productService.getById(productId);
+      if (!product) return null;
+
+      const { data, error } = await supabase.from('rfqs').select('*');
 
       if (error) {
         if (isSchemaError(error)) throw error;
         return null;
       }
-      if (!data) return null;
+
+      const matched = data?.find((row) => isProductMatch(row.product, product.name));
+      if (!matched) return null;
 
       return {
-        id: data.id,
-        productId: data.product_id,
-        specifications: data.specifications || [],
-        manufacturingNotes: data.manufacturing_notes || [],
+        id: matched.id,
+        productId,
+        specifications: parseSpecs(matched.specs),
+        manufacturingNotes: matched.description
+          ? [{ label: 'Additional Requirements', value: matched.description, pending: false }]
+          : [],
       };
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
@@ -315,25 +665,26 @@ export const rfqService = {
     }
   },
 
-  async save(productId: string, specs: DbRfqSpec['specifications'], notes: DbRfqSpec['manufacturingNotes']): Promise<void> {
+  async save(
+    productId: string,
+    specs: DbRfqSpec['specifications'],
+    notes: DbRfqSpec['manufacturingNotes']
+  ): Promise<void> {
     const supabase = createClient();
     try {
-      const { data: existing } = await supabase
-        .from('rfq_specs')
-        .select('id')
-        .eq('product_id', productId)
-        .maybeSingle();
+      const product = await productService.getById(productId);
+      if (!product) return;
 
-      if (existing) {
+      const { data } = await supabase.from('rfqs').select('*');
+
+      const matched = data?.find((row) => isProductMatch(row.product, product.name));
+      if (matched) {
+        const specsStr = JSON.stringify(specs);
+        const descriptionStr = notes.map((n) => `${n.label}: ${n.value}`).join('\n');
         const { error } = await supabase
-          .from('rfq_specs')
-          .update({ specifications: specs, manufacturing_notes: notes })
-          .eq('product_id', productId);
-        if (error && isSchemaError(error)) throw error;
-      } else {
-        const { error } = await supabase
-          .from('rfq_specs')
-          .insert({ product_id: productId, specifications: specs, manufacturing_notes: notes });
+          .from('rfqs')
+          .update({ specs: specsStr, description: descriptionStr })
+          .eq('id', matched.id);
         if (error && isSchemaError(error)) throw error;
       }
     } catch (err: any) {
@@ -348,30 +699,97 @@ export const quoteService = {
   async getByProductId(productId: string): Promise<DbQuoteStep[]> {
     const supabase = createClient();
     try {
-      const { data, error } = await supabase
-        .from('quote_steps')
+      const product = await productService.getById(productId);
+      if (!product) return [];
+
+      const { data: rfqs, error: rfqErr } = await supabase.from('rfqs').select('*');
+      if (rfqErr && isSchemaError(rfqErr)) throw rfqErr;
+
+      const matchedRfq = rfqs?.find((r) => isProductMatch(r.product, product.name));
+      if (!matchedRfq) return [];
+
+      const { data: quotes, error: quoteErr } = await supabase
+        .from('quotes')
         .select('*')
-        .eq('product_id', productId)
-        .order('step_order', { ascending: true });
+        .eq('rfq_id', matchedRfq.id);
+      if (quoteErr && isSchemaError(quoteErr)) throw quoteErr;
 
-      if (error) {
-        if (isSchemaError(error)) throw error;
-        return [];
-      }
+      const bidsCount = quotes?.length || matchedRfq.bids_received || 0;
+      const status = matchedRfq.status?.toLowerCase() || 'new';
 
-      return (data || []).map((row) => ({
-        id: row.id,
-        productId: row.product_id,
-        stepOrder: row.step_order,
-        label: row.label,
-        highlight: row.highlight,
-        highlightSuffix: row.highlight_suffix,
-        description: row.description,
-        stepStatus: row.step_status,
-        inProgress: row.in_progress,
-        supplierCount: row.supplier_count,
-        totalSuppliers: row.total_suppliers,
-      }));
+      const step1Status = 'completed';
+      const step2Status = ['new'].includes(status) ? 'active' : 'completed';
+      const step3Status = ['new', 'assigned'].includes(status)
+        ? 'pending'
+        : status === 'quoted'
+          ? 'active'
+          : 'completed';
+      const step4Status = ['new', 'assigned', 'quoted'].includes(status)
+        ? bidsCount > 0
+          ? 'active'
+          : 'pending'
+        : 'completed';
+
+      return [
+        {
+          id: 'quote-step-1',
+          productId,
+          stepOrder: 1,
+          label: 'Identified matches',
+          highlight: 'Verified matches',
+          highlightSuffix: ' in our network',
+          description:
+            'We search for suppliers that match your exact product requirement and location.',
+          stepStatus: step1Status as any,
+          inProgress: false,
+          supplierCount: bidsCount,
+          totalSuppliers: 150,
+        },
+        {
+          id: 'quote-step-2',
+          productId,
+          stepOrder: 2,
+          label: 'Reaching out to suppliers',
+          highlight: bidsCount > 0 ? `${bidsCount} suppliers interested` : null,
+          highlightSuffix: '',
+          description:
+            'We share your product info with matched suppliers to understand their interest.',
+          stepStatus: step2Status as any,
+          inProgress: step2Status === 'active',
+          supplierCount: bidsCount,
+          totalSuppliers: 150,
+        },
+        {
+          id: 'quote-step-3',
+          productId,
+          stepOrder: 3,
+          label: 'Engage suppliers',
+          highlight: null,
+          highlightSuffix: null,
+          description:
+            'We communicate with interested suppliers to verify their terms to prep for quotes.',
+          stepStatus: step3Status as any,
+          inProgress: step3Status === 'active',
+          supplierCount: bidsCount,
+          totalSuppliers: 150,
+        },
+        {
+          id: 'quote-step-4',
+          productId,
+          stepOrder: 4,
+          label: 'Receive quotes',
+          highlight: bidsCount > 0 ? `${bidsCount} quote(s)` : null,
+          highlightSuffix: bidsCount > 0 ? ' received' : '',
+          description:
+            bidsCount > 0
+              ? `Review the received quote details.`
+              : 'Supplier quotes will appear here once received.',
+          stepStatus: step4Status as any,
+          inProgress: step4Status === 'active',
+          supplierCount: bidsCount,
+          totalSuppliers: 150,
+        },
+      ];
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
       return [];
@@ -385,30 +803,34 @@ export const orderService = {
   async getByProductId(productId: string): Promise<DbOrder[]> {
     const supabase = createClient();
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('product_id', productId)
-        .order('created_at', { ascending: false });
+      const product = await productService.getById(productId);
+      if (!product) return [];
+
+      const { data, error } = await supabase.from('orders').select('*');
 
       if (error) {
         if (isSchemaError(error)) throw error;
         return [];
       }
 
-      return (data || []).map((row) => ({
-        id: row.id,
-        productId: row.product_id,
-        orderNumber: row.order_number,
-        description: row.description,
-        orderStatus: row.order_status,
-        statusColor: row.status_color,
-        supplier: row.supplier,
-        placedDate: row.placed_date,
-        estimatedDelivery: row.estimated_delivery,
-        amount: row.amount,
-        steps: row.steps || [],
-      }));
+      const matched = data?.filter((row) => isProductMatch(row.product, product.name)) || [];
+
+      return matched.map((row) => {
+        const details = getOrderStatusDetails(row.stage);
+        return {
+          id: row.id,
+          productId,
+          orderNumber: row.id,
+          description: `Contract Value: ${row.value || 'TBD'}`,
+          orderStatus: details.status,
+          statusColor: details.color,
+          supplier: row.supplier || 'Premium Supplier',
+          placedDate: formatDate(row.created_at),
+          estimatedDelivery: row.days ? `In ${row.days} days` : 'TBD',
+          amount: row.value || 'TBD',
+          steps: getOrderSteps(row.stage),
+        };
+      });
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
       return [];
@@ -419,38 +841,41 @@ export const orderService = {
 // ── Samples ────────────────────────────────────────────────────────────────
 
 export const sampleService = {
-  async getByProductId(productId: string): Promise<{ samples: DbSample[]; references: DbSample[] }> {
+  async getByProductId(
+    productId: string
+  ): Promise<{ samples: DbSample[]; references: DbSample[] }> {
     const supabase = createClient();
     try {
-      const { data, error } = await supabase
-        .from('samples')
-        .select('*')
-        .eq('product_id', productId)
-        .order('created_at', { ascending: true });
+      const product = await productService.getById(productId);
+      if (!product) return { samples: [], references: [] };
+
+      const { data, error } = await supabase.from('sample_orders').select('*');
 
       if (error) {
         if (isSchemaError(error)) throw error;
         return { samples: [], references: [] };
       }
 
-      const mapped = (data || []).map((row) => ({
+      const matched = data?.filter((row) => isProductMatch(row.product, product.name)) || [];
+
+      const mappedSamples: DbSample[] = matched.map((row) => ({
         id: row.id,
-        productId: row.product_id,
-        image: row.image,
-        imageAlt: row.image_alt,
-        name: row.name,
-        sampleType: row.sample_type,
-        supplier: row.supplier,
-        stage: row.stage,
-        requested: row.requested,
-        completion: row.completion,
-        isReference: row.is_reference,
-        creator: row.creator,
+        productId,
+        image: getProductImage(product.name, null),
+        imageAlt: `${row.product} Sample`,
+        name: `${row.product} Sample`,
+        sampleType: 'Pre-Production',
+        supplier: row.buyer_name || 'Verified Supplier',
+        stage: row.status || 'Pending',
+        requested: formatDate(row.requested_at),
+        completion: row.delivered_at || 'Pending',
+        isReference: false,
+        creator: 'Buyer',
       }));
 
       return {
-        samples: mapped.filter((s) => !s.isReference),
-        references: mapped.filter((s) => s.isReference),
+        samples: mappedSamples,
+        references: [],
       };
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
@@ -465,24 +890,58 @@ export const fileService = {
   async getByProductId(productId: string): Promise<DbProductFile[]> {
     const supabase = createClient();
     try {
-      const { data, error } = await supabase
-        .from('product_files')
-        .select('*')
-        .eq('product_id', productId)
-        .order('created_at', { ascending: false });
+      const product = await productService.getById(productId);
+      if (!product) return [];
 
-      if (error) {
-        if (isSchemaError(error)) throw error;
-        return [];
+      const { data: orders, error: orderErr } = await supabase.from('orders').select('*');
+      if (orderErr && isSchemaError(orderErr)) throw orderErr;
+
+      const matchedOrders =
+        orders?.filter((row) => isProductMatch(row.product, product.name)) || [];
+      const orderIds = matchedOrders.map((o) => o.id);
+
+      const files: DbProductFile[] = [];
+
+      if (orderIds.length > 0) {
+        const { data: docs, error: docErr } = await supabase
+          .from('documents')
+          .select('*')
+          .in('order_id', orderIds);
+        if (docErr && isSchemaError(docErr)) throw docErr;
+
+        if (docs) {
+          docs.forEach((doc) => {
+            files.push({
+              id: doc.id,
+              productId,
+              name: doc.name || `${doc.type || 'Document'} - ${doc.order_id}`,
+              fileDate: formatDate(doc.uploaded_at),
+              fileUrl: doc.file_url || '',
+            });
+          });
+        }
       }
 
-      return (data || []).map((row) => ({
-        id: row.id,
-        productId: row.product_id,
-        name: row.name,
-        fileDate: row.file_date,
-        fileUrl: row.file_url || '',
-      }));
+      const { data: sampleOrders, error: sampleErr } = await supabase
+        .from('sample_orders')
+        .select('*');
+      if (sampleErr && isSchemaError(sampleErr)) throw sampleErr;
+
+      const matchedSamples =
+        sampleOrders?.filter((row) => isProductMatch(row.product, product.name)) || [];
+      matchedSamples.forEach((sample) => {
+        if (sample.doc_url) {
+          files.push({
+            id: `sample-doc-${sample.id}`,
+            productId,
+            name: sample.doc_name || `Sample Spec Document - ${sample.id}`,
+            fileDate: formatDate(sample.requested_at),
+            fileUrl: sample.doc_url,
+          });
+        }
+      });
+
+      return files;
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
       return [];
@@ -493,36 +952,99 @@ export const fileService = {
 // ── Product Updates ────────────────────────────────────────────────────────
 
 export const updateService = {
-  async getByProductId(productId: string): Promise<{ tasks: DbProductUpdate[]; updates: DbProductUpdate[] }> {
+  async getByProductId(
+    productId: string
+  ): Promise<{ tasks: DbProductUpdate[]; updates: DbProductUpdate[] }> {
     const supabase = createClient();
     try {
-      const { data, error } = await supabase
-        .from('product_updates')
-        .select('*')
-        .eq('product_id', productId)
-        .order('created_at', { ascending: false });
+      const product = await productService.getById(productId);
+      if (!product) return { tasks: [], updates: [] };
 
-      if (error) {
-        if (isSchemaError(error)) throw error;
-        return { tasks: [], updates: [] };
+      const [ordersRes, rfqsRes] = await Promise.all([
+        supabase.from('orders').select('*'),
+        supabase.from('rfqs').select('*'),
+      ]);
+
+      const matchedOrders =
+        ordersRes.data?.filter((o) => isProductMatch(o.product, product.name)) || [];
+      const matchedRfqs =
+        rfqsRes.data?.filter((r) => isProductMatch(r.product, product.name)) || [];
+
+      const orderIds = matchedOrders.map((o) => o.id);
+      const rfqIds = matchedRfqs.map((r) => r.id);
+      const allTargetIds = [...orderIds, ...rfqIds];
+
+      const tasks: DbProductUpdate[] = [];
+      const updates: DbProductUpdate[] = [];
+
+      if (orderIds.length > 0) {
+        const { data: milestones, error: mileErr } = await supabase
+          .from('milestones')
+          .select('*')
+          .in('order_id', orderIds);
+        if (mileErr && isSchemaError(mileErr)) throw mileErr;
+
+        if (milestones) {
+          milestones.forEach((m) => {
+            const isCompleted = m.status?.toLowerCase() === 'completed';
+            const mappedUpdate: DbProductUpdate = {
+              id: m.id,
+              productId,
+              updateType: isCompleted ? 'Info' : 'Action',
+              title: m.title,
+              description: m.description || '',
+              updateDate: formatDate(m.completed_at || m.created_at || m.target_date),
+              supplier: m.updated_by || 'System',
+              replies: 0,
+              isTask: !isCompleted,
+            };
+
+            if (mappedUpdate.isTask) {
+              tasks.push(mappedUpdate);
+            } else {
+              updates.push(mappedUpdate);
+            }
+          });
+        }
       }
 
-      const mapped = (data || []).map((row) => ({
-        id: row.id,
-        productId: row.product_id,
-        updateType: row.update_type as 'Action' | 'Info',
-        title: row.title,
-        description: row.description,
-        updateDate: row.update_date,
-        supplier: row.supplier,
-        replies: row.replies,
-        isTask: row.is_task,
-      }));
+      const { data: notifications, error: notifErr } = await supabase
+        .from('notifications')
+        .select('*');
+      if (notifErr && isSchemaError(notifErr)) throw notifErr;
 
-      return {
-        tasks: mapped.filter((u) => u.isTask),
-        updates: mapped.filter((u) => !u.isTask),
-      };
+      if (notifications) {
+        const matchedNotifications = notifications.filter((n) => {
+          const linksToTarget = allTargetIds.includes(n.order_id);
+          const mentionsProduct =
+            n.message?.toLowerCase().includes(product.name.toLowerCase()) ||
+            n.title?.toLowerCase().includes(product.name.toLowerCase());
+          return linksToTarget || mentionsProduct;
+        });
+
+        matchedNotifications.forEach((n) => {
+          const isAction = n.read === false;
+          const mappedUpdate: DbProductUpdate = {
+            id: String(n.id),
+            productId,
+            updateType: isAction ? 'Action' : 'Info',
+            title: n.title,
+            description: n.message || '',
+            updateDate: formatDate(n.created_at),
+            supplier: 'System',
+            replies: 0,
+            isTask: isAction,
+          };
+
+          if (mappedUpdate.isTask) {
+            tasks.push(mappedUpdate);
+          } else {
+            updates.push(mappedUpdate);
+          }
+        });
+      }
+
+      return { tasks, updates };
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
       return { tasks: [], updates: [] };
@@ -535,19 +1057,11 @@ export const updateService = {
 export const activityService = {
   async getRecent(limit = 10): Promise<DbActivityItem[]> {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
-
     try {
-      // Get user's org
-      const { data: profile } = await supabase
-        .from('user_profiles').select('organization_id').eq('id', user.id)
-        .maybeSingle();
-
-      if (!profile?.organization_id) return [];
-
       const { data, error } = await supabase
-        .from('activity_feed').select('*').eq('organization_id', profile.organization_id).order('created_at', { ascending: false })
+        .from('activity_log')
+        .select('*')
+        .order('created_at', { ascending: false })
         .limit(limit);
 
       if (error) {
@@ -557,10 +1071,10 @@ export const activityService = {
 
       return (data || []).map((row) => ({
         id: row.id,
-        activityType: row.activity_type,
-        title: row.title,
-        description: row.description,
-        productId: row.product_id,
+        activityType: row.type || 'info',
+        title: row.status || row.type || 'Update',
+        description: row.description || '',
+        productId: null,
         createdAt: row.created_at,
       }));
     } catch (err: any) {
@@ -575,22 +1089,16 @@ export const activityService = {
 export const organizationService = {
   async get(): Promise<DbOrganization | null> {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return null;
 
     try {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('organization_id')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (!profile?.organization_id) return null;
-
       const { data, error } = await supabase
-        .from('organizations')
+        .from('buyer_profiles')
         .select('*')
-        .eq('id', profile.organization_id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (error) {
@@ -601,9 +1109,9 @@ export const organizationService = {
 
       return {
         id: data.id,
-        name: data.name,
+        name: data.organization_name || '',
         legalName: data.legal_name || '',
-        orgType: data.org_type || '',
+        orgType: data.company_type || '',
         industry: data.industry || '',
         founded: data.founded || '',
         registrationNumber: data.registration_number || '',
@@ -629,11 +1137,11 @@ export const organizationService = {
     const supabase = createClient();
     try {
       const { error } = await supabase
-        .from('organizations')
+        .from('buyer_profiles')
         .update({
-          name: org.name,
+          organization_name: org.name,
           legal_name: org.legalName,
-          org_type: org.orgType,
+          company_type: org.orgType,
           industry: org.industry,
           founded: org.founded,
           registration_number: org.registrationNumber,
@@ -661,14 +1169,22 @@ export const organizationService = {
 // ── User Profile ───────────────────────────────────────────────────────────
 
 export const userProfileService = {
-  async get(): Promise<{ id: string; email: string; fullName: string; role: string; organizationId: string | null } | null> {
+  async get(): Promise<{
+    id: string;
+    email: string;
+    fullName: string;
+    role: string;
+    organizationId: string | null;
+  } | null> {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return null;
 
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
@@ -681,10 +1197,10 @@ export const userProfileService = {
 
       return {
         id: data.id,
-        email: data.email,
-        fullName: data.full_name,
-        role: data.role,
-        organizationId: data.organization_id,
+        email: data.email || '',
+        fullName: data.name || '',
+        role: data.role || data.type || 'buyer',
+        organizationId: data.id,
       };
     } catch (err: any) {
       if (isSchemaError(err)) throw err;

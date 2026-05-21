@@ -16,15 +16,22 @@ export default function OrdersTab({ orders, steps }: OrdersTabProps) {
         {orders?.length} Order{orders?.length !== 1 ? 's' : ''}
       </h3>
       {orders?.map((order) => (
-        <div key={order?.id} className="bg-white border border-[var(--border)] rounded-xl overflow-hidden mb-4">
+        <div
+          key={order?.id}
+          className="bg-white border border-[var(--border)] rounded-xl overflow-hidden mb-4"
+        >
           <div className="flex items-start justify-between px-5 py-4 border-b border-[var(--border)]">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg bg-[var(--secondary)] flex items-center justify-center flex-shrink-0">
                 <Package size={18} className="text-primary" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-[var(--foreground)]">{order?.orderNumber}</p>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{order?.description}</p>
+                <p className="text-sm font-semibold text-[var(--foreground)]">
+                  {order?.orderNumber}
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  {order?.description}
+                </p>
               </div>
             </div>
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${order?.statusColor}`}>
@@ -42,11 +49,15 @@ export default function OrdersTab({ orders, steps }: OrdersTabProps) {
             </div>
             <div>
               <p className="text-xs text-[var(--muted-foreground)] mb-0.5">Est. Delivery</p>
-              <p className="text-sm font-medium text-[var(--foreground)]">{order?.estimatedDelivery}</p>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {order?.estimatedDelivery}
+              </p>
             </div>
             <div>
               <p className="text-xs text-[var(--muted-foreground)] mb-0.5">Amount</p>
-              <p className="text-sm font-semibold text-[var(--foreground)] tabular-nums">{order?.amount}</p>
+              <p className="text-sm font-semibold text-[var(--foreground)] tabular-nums">
+                {order?.amount}
+              </p>
             </div>
           </div>
           {/* Progress steps */}
@@ -59,12 +70,16 @@ export default function OrdersTab({ orders, steps }: OrdersTabProps) {
                     <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
                       <div
                         className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                          step?.done ? 'bg-primary text-white' : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
+                          step?.done
+                            ? 'bg-primary text-white'
+                            : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
                         }`}
                       >
                         <StepIcon size={14} />
                       </div>
-                      <span className={`text-xs text-center max-w-[72px] leading-tight ${step?.done ? 'text-primary font-medium' : 'text-[var(--muted-foreground)]'}`}>
+                      <span
+                        className={`text-xs text-center max-w-[72px] leading-tight ${step?.done ? 'text-primary font-medium' : 'text-[var(--muted-foreground)]'}`}
+                      >
                         {step?.label}
                       </span>
                     </div>

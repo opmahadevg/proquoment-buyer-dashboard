@@ -44,17 +44,19 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
 
       if (error) throw error;
 
-      setNotifications((data || []).map((n: any) => ({
-        id: n.id,
-        targetDashboard: n.target_dashboard,
-        orderId: n.order_id,
-        type: n.type,
-        title: n.title,
-        message: n.message,
-        read: n.read ?? false,
-        actionUrl: n.action_url,
-        createdAt: n.created_at,
-      })));
+      setNotifications(
+        (data || []).map((n: any) => ({
+          id: n.id,
+          targetDashboard: n.target_dashboard,
+          orderId: n.order_id,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          read: n.read ?? false,
+          actionUrl: n.action_url,
+          createdAt: n.created_at,
+        }))
+      );
     } catch (err) {
       console.error('Error fetching notifications:', err);
     } finally {
@@ -92,11 +94,11 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 actionUrl: newRow.action_url,
                 createdAt: newRow.created_at,
               };
-              setNotifications(prev => {
-                if (prev.some(n => n.id === mapped.id)) return prev;
+              setNotifications((prev) => {
+                if (prev.some((n) => n.id === mapped.id)) return prev;
                 return [mapped, ...prev];
               });
-              
+
               // Trigger toast notification
               toast.info(mapped.title, {
                 description: mapped.message,
@@ -106,16 +108,22 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
           } else if (payload.eventType === 'UPDATE') {
             const newRow = payload.new;
             if (newRow.target_dashboard === 'buyer') {
-              setNotifications(prev => prev.map(n => n.id === newRow.id ? {
-                ...n,
-                read: newRow.read ?? false,
-                title: newRow.title,
-                message: newRow.message,
-              } : n));
+              setNotifications((prev) =>
+                prev.map((n) =>
+                  n.id === newRow.id
+                    ? {
+                        ...n,
+                        read: newRow.read ?? false,
+                        title: newRow.title,
+                        message: newRow.message,
+                      }
+                    : n
+                )
+              );
             }
           } else if (payload.eventType === 'DELETE') {
             const deletedId = payload.old.id;
-            setNotifications(prev => prev.filter(n => n.id !== deletedId));
+            setNotifications((prev) => prev.filter((n) => n.id !== deletedId));
           }
         }
       )
@@ -128,12 +136,9 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
 
   const markAsRead = async (id: number) => {
     // Optimistic update
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', id);
+      const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
       if (error) throw error;
     } catch (err) {
       console.error('Failed to mark notification as read:', err);
@@ -144,7 +149,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
 
   const markAllAsRead = async () => {
     // Optimistic update
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
       const { error } = await supabase
         .from('notifications')
@@ -158,17 +163,19 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <NotificationContext.Provider value={{
-      notifications,
-      unreadCount,
-      loading,
-      markAsRead,
-      markAllAsRead,
-      refreshNotifications
-    }}>
+    <NotificationContext.Provider
+      value={{
+        notifications,
+        unreadCount,
+        loading,
+        markAsRead,
+        markAllAsRead,
+        refreshNotifications,
+      }}
+    >
       {children}
     </NotificationContext.Provider>
   );

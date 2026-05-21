@@ -11,123 +11,238 @@ function getSupabase() {
 export async function fetchBuyerRFQs() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('rfqs').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('fetchBuyerRFQs:', error); return []; }
+  const { data, error } = await supabase
+    .from('rfqs')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('fetchBuyerRFQs:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, product: r.product, buyer: r.buyer, qty: r.qty,
-    value: r.value, status: r.status, date: r.date,
-    assignedSupplier: r.assigned_supplier, deadline: r.deadline,
-    targetPrice: r.target_price, specs: r.specs, createdAt: r.created_at,
+    id: r.id,
+    product: r.product,
+    buyer: r.buyer,
+    qty: r.qty,
+    value: r.value,
+    status: r.status,
+    date: r.date,
+    assignedSupplier: r.assigned_supplier,
+    deadline: r.deadline,
+    targetPrice: r.target_price,
+    specs: r.specs,
+    createdAt: r.created_at,
   }));
 }
 
 export async function fetchBuyerQuotes() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('quotes').select('*')
-    .in('status', ['sent', 'accepted', 'rejected']).order('created_at', { ascending: false });
-  if (error) { console.error('fetchBuyerQuotes:', error); return []; }
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('*')
+    .in('status', ['sent', 'accepted', 'rejected'])
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('fetchBuyerQuotes:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, rfqId: r.rfq_id, orderId: r.order_id, supplierId: r.supplier_id,
-    supplierUnitPrice: r.supplier_unit_price, qty: r.qty,
-    qcFee: r.qc_fee, docFee: r.doc_fee, freightCost: r.freight_cost,
-    insurance: r.insurance, marginPct: r.margin_pct,
-    landedCostPerUnit: r.landed_cost_per_unit, totalValue: r.total_value,
-    validityDays: r.validity_days, status: r.status,
-    sentAt: r.sent_at, createdAt: r.created_at,
+    id: r.id,
+    rfqId: r.rfq_id,
+    orderId: r.order_id,
+    supplierId: r.supplier_id,
+    supplierUnitPrice: r.supplier_unit_price,
+    qty: r.qty,
+    qcFee: r.qc_fee,
+    docFee: r.doc_fee,
+    freightCost: r.freight_cost,
+    insurance: r.insurance,
+    marginPct: r.margin_pct,
+    landedCostPerUnit: r.landed_cost_per_unit,
+    totalValue: r.total_value,
+    validityDays: r.validity_days,
+    status: r.status,
+    sentAt: r.sent_at,
+    createdAt: r.created_at,
   }));
 }
 
 export async function fetchBuyerOrders() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('fetchBuyerOrders:', error); return []; }
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('fetchBuyerOrders:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, product: r.product, buyer: r.buyer, supplier: r.supplier,
-    supplierCity: r.supplier_city, value: r.value, stage: r.stage,
-    progress: r.progress, days: r.days, eta: r.eta,
-    priority: r.priority, createdAt: r.created_at,
+    id: r.id,
+    product: r.product,
+    buyer: r.buyer,
+    supplier: r.supplier,
+    supplierCity: r.supplier_city,
+    value: r.value,
+    stage: r.stage,
+    progress: r.progress,
+    days: r.days,
+    eta: r.eta,
+    priority: r.priority,
+    createdAt: r.created_at,
   }));
 }
 
 export async function fetchBuyerQCReports() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('qc_reports').select('*').order('uploaded_at', { ascending: false });
-  if (error) { console.error('fetchBuyerQCReports:', error); return []; }
+  const { data, error } = await supabase
+    .from('qc_reports')
+    .select('*')
+    .order('uploaded_at', { ascending: false });
+  if (error) {
+    console.error('fetchBuyerQCReports:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, orderId: r.order_id, qcInspectionId: r.qc_inspection_id,
-    reportUrl: r.report_url, result: r.result, notes: r.notes,
-    photos: r.photos, uploadedAt: r.uploaded_at,
+    id: r.id,
+    orderId: r.order_id,
+    qcInspectionId: r.qc_inspection_id,
+    reportUrl: r.report_url,
+    result: r.result,
+    notes: r.notes,
+    photos: r.photos,
+    uploadedAt: r.uploaded_at,
   }));
 }
 
 export async function fetchBuyerShipments() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('shipments').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('fetchBuyerShipments:', error); return []; }
+  const { data, error } = await supabase
+    .from('shipments')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('fetchBuyerShipments:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, orderId: r.order_id, forwarder: r.forwarder,
-    pol: r.pol, pod: r.pod, incoterms: r.incoterms,
-    bookingRef: r.booking_ref, containerNo: r.container_no,
-    vesselName: r.vessel_name, departureDate: r.departure_date,
-    eta: r.eta, customsStatus: r.customs_status,
-    deliveryConfirmed: r.delivery_confirmed, createdAt: r.created_at,
+    id: r.id,
+    orderId: r.order_id,
+    forwarder: r.forwarder,
+    pol: r.pol,
+    pod: r.pod,
+    incoterms: r.incoterms,
+    bookingRef: r.booking_ref,
+    containerNo: r.container_no,
+    vesselName: r.vessel_name,
+    departureDate: r.departure_date,
+    eta: r.eta,
+    customsStatus: r.customs_status,
+    deliveryConfirmed: r.delivery_confirmed,
+    createdAt: r.created_at,
   }));
 }
 
 export async function fetchBuyerInvoices() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('fetchBuyerInvoices:', error); return []; }
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('fetchBuyerInvoices:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, orderId: r.order_id, amount: r.amount, currency: r.currency,
-    status: r.status, dueDate: r.due_date, paidAt: r.paid_at,
-    paymentRef: r.payment_ref, createdAt: r.created_at,
+    id: r.id,
+    orderId: r.order_id,
+    amount: r.amount,
+    currency: r.currency,
+    status: r.status,
+    dueDate: r.due_date,
+    paidAt: r.paid_at,
+    paymentRef: r.payment_ref,
+    createdAt: r.created_at,
   }));
 }
 
 export async function fetchBuyerNotifications() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('notifications').select('*')
-    .eq('target_dashboard', 'buyer').order('created_at', { ascending: false }).limit(30);
-  if (error) { console.error('fetchBuyerNotifications:', error); return []; }
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('target_dashboard', 'buyer')
+    .order('created_at', { ascending: false })
+    .limit(30);
+  if (error) {
+    console.error('fetchBuyerNotifications:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, targetDashboard: r.target_dashboard, orderId: r.order_id,
-    type: r.type, title: r.title, message: r.message,
-    read: r.read ?? false, actionUrl: r.action_url, createdAt: r.created_at,
+    id: r.id,
+    targetDashboard: r.target_dashboard,
+    orderId: r.order_id,
+    type: r.type,
+    title: r.title,
+    message: r.message,
+    read: r.read ?? false,
+    actionUrl: r.action_url,
+    createdAt: r.created_at,
   }));
 }
 
 export async function fetchBuyerDocuments() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('documents').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('fetchBuyerDocuments:', error); return []; }
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('fetchBuyerDocuments:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, orderId: r.order_id, name: r.name, type: r.type,
-    preparedBy: r.prepared_by, status: r.status,
-    uploadedAt: r.uploaded_at, url: r.url,
+    id: r.id,
+    orderId: r.order_id,
+    name: r.name,
+    type: r.type,
+    preparedBy: r.prepared_by,
+    status: r.status,
+    uploadedAt: r.uploaded_at,
+    url: r.url,
   }));
 }
 
 // ── Write Operations ──────────────────────────────────
 
 export async function submitRFQ(rfq: {
-  product: string; qty: string; value: string; targetPrice?: string;
-  specs?: string; deadline?: string; buyer: string;
+  product: string;
+  qty: string;
+  value: string;
+  targetPrice?: string;
+  specs?: string;
+  deadline?: string;
+  buyer: string;
+  description?: string;
+  aiChat?: any;
 }) {
   const supabase = getSupabase();
   if (!supabase) throw new Error('No Supabase client');
   const id = `RFQ-${Date.now().toString(36).toUpperCase()}`;
-  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const dateStr = new Date().toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
-  // Only insert columns that exist in the rfqs table schema:
-  // id, product, buyer, date, qty, status, value, created_at (auto)
+  // Insert columns including deadline, specs, description, and ai_chat
   const { error } = await supabase.from('rfqs').insert({
     id,
     product: rfq.product,
@@ -136,6 +251,10 @@ export async function submitRFQ(rfq: {
     value: rfq.value || 'TBD',
     status: 'new',
     date: dateStr,
+    deadline: rfq.deadline || null,
+    specs: rfq.specs || null,
+    description: rfq.description || null,
+    ai_chat: rfq.aiChat || null,
   });
   if (error) throw error;
 
@@ -144,14 +263,21 @@ export async function submitRFQ(rfq: {
     rfq.specs && `Specs: ${rfq.specs}`,
     rfq.targetPrice && `Target: ${rfq.targetPrice}`,
     rfq.deadline && `Deadline: ${rfq.deadline}`,
-  ].filter(Boolean).join(' | ');
+  ]
+    .filter(Boolean)
+    .join(' | ');
 
   // Notify admin
-  await supabase.from('notifications').insert({
-    target_dashboard: 'admin', type: 'new_rfq', title: `New RFQ: ${rfq.product}`,
-    message: `${rfq.buyer || 'Buyer'} submitted RFQ for ${rfq.qty} of ${rfq.product} (${rfq.value || 'TBD'})${extras ? '. ' + extras : ''}`,
-    action_url: `/rfq/${id}`,
-  }).catch(() => {}); // Notification failure should not block RFQ creation
+  await supabase
+    .from('notifications')
+    .insert({
+      target_dashboard: 'admin',
+      type: 'new_rfq',
+      title: `New RFQ: ${rfq.product}`,
+      message: `${rfq.buyer || 'Buyer'} submitted RFQ for ${rfq.qty} of ${rfq.product} (${rfq.value || 'TBD'})${extras ? '. ' + extras : ''}`,
+      action_url: `/rfq/${id}`,
+    })
+    .catch(() => {}); // Notification failure should not block RFQ creation
 
   return id;
 }
@@ -219,8 +345,11 @@ export async function acceptQuote(quoteId: string, rfqId: string) {
   const product = rfq?.product || 'Custom Product Order';
   const buyer = rfq?.buyer || 'Enterprise Buyer';
   const supplier = rfq?.assigned_supplier || quote?.supplier_id || 'Premium Supplier';
-  const contractValue = quote?.total_value || parseFloat(String(rfq?.value || '0').replace(/[$,]/g, '')) || 0;
-  const totalValue = quote?.total_value ? `$${quote.total_value.toLocaleString()}` : rfq?.value || '$0';
+  const contractValue =
+    quote?.total_value || parseFloat(String(rfq?.value || '0').replace(/[$,]/g, '')) || 0;
+  const totalValue = quote?.total_value
+    ? `$${quote.total_value.toLocaleString()}`
+    : rfq?.value || '$0';
 
   // Automatically insert Order into database
   const orderId = await insertOrder({
@@ -258,7 +387,9 @@ export async function rejectQuote(quoteId: string, rfqId: string) {
   const { error } = await supabase.from('quotes').update({ status: 'rejected' }).eq('id', quoteId);
   if (error) throw error;
   await supabase.from('notifications').insert({
-    target_dashboard: 'admin', type: 'quote_rejected', title: `Quote ${quoteId} Rejected`,
+    target_dashboard: 'admin',
+    type: 'quote_rejected',
+    title: `Quote ${quoteId} Rejected`,
     message: `Buyer rejected quote linked to ${rfqId}`,
   });
 }
@@ -269,7 +400,9 @@ export async function confirmDelivery(shipmentId: string, orderId: string) {
   await supabase.from('shipments').update({ delivery_confirmed: true }).eq('id', shipmentId);
   await supabase.from('orders').update({ stage: 'delivered' }).eq('id', orderId);
   await supabase.from('notifications').insert({
-    target_dashboard: 'admin', order_id: orderId, type: 'stage_update',
+    target_dashboard: 'admin',
+    order_id: orderId,
+    type: 'stage_update',
     title: `Delivery Confirmed: ${orderId}`,
     message: 'Buyer confirmed receipt of goods',
   });
@@ -306,19 +439,33 @@ export async function createNotification(params: {
 export async function fetchBuyerMilestones() {
   const supabase = getSupabase();
   if (!supabase) return [];
-  const { data, error } = await supabase.from('milestones').select('*').order('created_at', { ascending: true });
-  if (error) { console.error('fetchBuyerMilestones:', error); return []; }
+  const { data, error } = await supabase
+    .from('milestones')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('fetchBuyerMilestones:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, orderId: r.order_id, title: r.title,
-    description: r.description, status: r.status, targetDate: r.target_date,
-    completedAt: r.completed_at, updatedBy: r.updated_by, createdAt: r.created_at,
+    id: r.id,
+    orderId: r.order_id,
+    title: r.title,
+    description: r.description,
+    status: r.status,
+    targetDate: r.target_date,
+    completedAt: r.completed_at,
+    updatedBy: r.updated_by,
+    createdAt: r.created_at,
   }));
 }
 
 export async function fetchCurrentBuyerProfile() {
   const supabase = getSupabase();
   if (!supabase) return null;
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data, error } = await supabase
@@ -337,16 +484,16 @@ export async function fetchCurrentBuyerProfile() {
 export async function saveCurrentBuyerProfile(profile: any) {
   const supabase = getSupabase();
   if (!supabase) return;
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const { error } = await supabase
-    .from('buyer_profiles')
-    .upsert({
-      id: user.id,
-      ...profile,
-      updated_at: new Date().toISOString(),
-    });
+  const { error } = await supabase.from('buyer_profiles').upsert({
+    id: user.id,
+    ...profile,
+    updated_at: new Date().toISOString(),
+  });
 
   if (error) throw error;
 }
@@ -360,22 +507,30 @@ export async function fetchBuyerMessages() {
     .or('to_name.eq.Buyer,from_name.eq.Admin,type.eq.buyer')
     .order('created_at', { ascending: false })
     .limit(50);
-  if (error) { console.error('fetchBuyerMessages:', error); return []; }
+  if (error) {
+    console.error('fetchBuyerMessages:', error);
+    return [];
+  }
   return (data || []).map((r: any) => ({
-    id: r.id, orderId: r.order_id,
-    from: r.from_name, to: r.to_name,
-    subject: r.subject, text: r.text,
-    time: r.time, type: r.type,
-    read: r.read ?? false, createdAt: r.created_at,
+    id: r.id,
+    orderId: r.order_id,
+    from: r.from_name,
+    to: r.to_name,
+    subject: r.subject,
+    text: r.text,
+    time: r.time,
+    type: r.type,
+    read: r.read ?? false,
+    createdAt: r.created_at,
   }));
 }
 
-export async function sendBuyerMessage(msg: {
-  orderId?: string; subject: string; text: string;
-}) {
+export async function sendBuyerMessage(msg: { orderId?: string; subject: string; text: string }) {
   const supabase = getSupabase();
   if (!supabase) throw new Error('No Supabase client');
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const fromName = user?.email?.split('@')[0] || 'Enterprise Buyer';
 
   const { error } = await supabase.from('messages').insert({
@@ -391,15 +546,18 @@ export async function sendBuyerMessage(msg: {
   });
   if (error) throw error;
 
-  await supabase.from('notifications').insert({
-    target_dashboard: 'admin',
-    order_id: msg.orderId,
-    type: 'message_received',
-    title: `New Message from ${fromName}`,
-    message: msg.text.slice(0, 100),
-    action_url: '/communications',
-    read: false,
-  }).catch(() => {});
+  await supabase
+    .from('notifications')
+    .insert({
+      target_dashboard: 'admin',
+      order_id: msg.orderId,
+      type: 'message_received',
+      title: `New Message from ${fromName}`,
+      message: msg.text.slice(0, 100),
+      action_url: '/communications',
+      read: false,
+    })
+    .catch(() => {});
 }
 
 export async function markBuyerMessageRead(messageId: string) {

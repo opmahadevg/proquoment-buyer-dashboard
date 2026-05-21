@@ -21,7 +21,12 @@ function InfoRow({ icon, label, value, link }: InfoRowProps) {
       <div className="flex-1 min-w-0">
         <p className="text-xs text-[var(--muted-foreground)] mb-0.5">{label}</p>
         {link ? (
-          <a href={link} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline flex items-center gap-1 break-all">
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-primary hover:underline flex items-center gap-1 break-all"
+          >
             {value}
             <ExternalLink size={11} className="flex-shrink-0" />
           </a>
@@ -70,7 +75,9 @@ export default function OrganizationContent() {
             {(org.name || 'O').charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg md:text-xl font-bold text-[var(--foreground)] truncate">{org.name}</h2>
+            <h2 className="text-lg md:text-xl font-bold text-[var(--foreground)] truncate">
+              {org.name}
+            </h2>
             <p className="text-sm text-[var(--muted-foreground)] truncate">{org.legalName}</p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               {org.type && (
@@ -101,9 +108,19 @@ export default function OrganizationContent() {
             Contact Details
           </h3>
           <div className="mt-3">
-            <InfoRow icon={<Mail size={14} />} label="Email" value={org.email} link={org.email ? `mailto:${org.email}` : undefined} />
+            <InfoRow
+              icon={<Mail size={14} />}
+              label="Email"
+              value={org.email}
+              link={org.email ? `mailto:${org.email}` : undefined}
+            />
             <InfoRow icon={<Phone size={14} />} label="Phone" value={org.phone} />
-            <InfoRow icon={<Globe size={14} />} label="Website" value={org.website} link={org.website || undefined} />
+            <InfoRow
+              icon={<Globe size={14} />}
+              label="Website"
+              value={org.website}
+              link={org.website || undefined}
+            />
           </div>
         </div>
 
@@ -129,7 +146,11 @@ export default function OrganizationContent() {
             Business Info
           </h3>
           <div className="mt-3">
-            <InfoRow icon={<FileText size={14} />} label="Registration No." value={org.registrationNumber} />
+            <InfoRow
+              icon={<FileText size={14} />}
+              label="Registration No."
+              value={org.registrationNumber}
+            />
             <InfoRow icon={<FileText size={14} />} label="Tax ID" value={org.taxId} />
             <InfoRow icon={<Building2 size={14} />} label="Founded" value={org.founded} />
           </div>

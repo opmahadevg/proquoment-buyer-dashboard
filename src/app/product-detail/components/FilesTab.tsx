@@ -31,7 +31,9 @@ export default function FilesTab({ files }: FilesTabProps) {
             <span className="text-sm text-[var(--foreground)] truncate">{file?.name}</span>
           </div>
           <div className="flex items-center gap-6 flex-shrink-0 ml-4">
-            <span className="text-sm text-[var(--muted-foreground)] whitespace-nowrap">{file?.date}</span>
+            <span className="text-sm text-[var(--muted-foreground)] whitespace-nowrap">
+              {file?.date}
+            </span>
             <button className="w-9 h-9 rounded-full border border-[var(--border)] flex items-center justify-center hover:bg-[var(--muted)] transition-colors text-[var(--muted-foreground)]">
               <ArrowDownToLine size={16} />
             </button>

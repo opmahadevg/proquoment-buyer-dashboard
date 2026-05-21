@@ -10,7 +10,10 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-const CHART_DATA: Record<string, { label: string; key: string; data: { month: string; spend: number }[] }> = {
+const CHART_DATA: Record<
+  string,
+  { label: string; key: string; data: { month: string; spend: number }[] }
+> = {
   'range-7d': {
     label: '26 Apr – 2 May 2026',
     key: 'day',

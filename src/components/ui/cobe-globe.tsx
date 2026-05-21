@@ -118,7 +118,11 @@ export function Globe({
         markerColor,
         glowColor,
         markerElevation: 0.01,
-        markers: markers.map((m) => ({ location: m.location, size: m.size ?? markerSize, id: m.id })),
+        markers: markers.map((m) => ({
+          location: m.location,
+          size: m.size ?? markerSize,
+          id: m.id,
+        })),
         arcs: [],
         arcColor: markerColor,
         arcWidth: 0,
@@ -129,15 +133,21 @@ export function Globe({
       function animate() {
         if (!isPausedRef.current) {
           phi += speed;
-          if (Math.abs(velocity.current.phi) > 0.0001 || Math.abs(velocity.current.theta) > 0.0001) {
+          if (
+            Math.abs(velocity.current.phi) > 0.0001 ||
+            Math.abs(velocity.current.theta) > 0.0001
+          ) {
             phiOffsetRef.current += velocity.current.phi;
             thetaOffsetRef.current += velocity.current.theta;
             velocity.current.phi *= 0.94;
             velocity.current.theta *= 0.94;
           }
-          const tMin = -0.35, tMax = 0.35;
-          if (thetaOffsetRef.current < tMin) thetaOffsetRef.current += (tMin - thetaOffsetRef.current) * 0.1;
-          else if (thetaOffsetRef.current > tMax) thetaOffsetRef.current += (tMax - thetaOffsetRef.current) * 0.1;
+          const tMin = -0.35,
+            tMax = 0.35;
+          if (thetaOffsetRef.current < tMin)
+            thetaOffsetRef.current += (tMin - thetaOffsetRef.current) * 0.1;
+          else if (thetaOffsetRef.current > tMax)
+            thetaOffsetRef.current += (tMax - thetaOffsetRef.current) * 0.1;
         }
         globe!.update({
           phi: phi + phiOffsetRef.current + dragOffset.current.phi,
@@ -147,19 +157,28 @@ export function Globe({
           markerColor,
           baseColor,
           markerElevation: 0.01,
-          markers: markers.map((m) => ({ location: m.location, size: m.size ?? markerSize, id: m.id })),
+          markers: markers.map((m) => ({
+            location: m.location,
+            size: m.size ?? markerSize,
+            id: m.id,
+          })),
         });
         animationId = requestAnimationFrame(animate);
       }
       animate();
-      setTimeout(() => { if (canvas) canvas.style.opacity = '1'; });
+      setTimeout(() => {
+        if (canvas) canvas.style.opacity = '1';
+      });
     }
 
     if (canvas.offsetWidth > 0) {
       init();
     } else {
       const ro = new ResizeObserver((entries) => {
-        if (entries[0]?.contentRect.width > 0) { ro.disconnect(); init(); }
+        if (entries[0]?.contentRect.width > 0) {
+          ro.disconnect();
+          init();
+        }
       });
       ro.observe(canvas);
     }
@@ -168,7 +187,19 @@ export function Globe({
       if (animationId) cancelAnimationFrame(animationId);
       if (globe) globe.destroy();
     };
-  }, [markers, markerColor, baseColor, glowColor, dark, mapBrightness, markerSize, speed, theta, diffuse, mapSamples]);
+  }, [
+    markers,
+    markerColor,
+    baseColor,
+    glowColor,
+    dark,
+    mapBrightness,
+    markerSize,
+    speed,
+    theta,
+    diffuse,
+    mapSamples,
+  ]);
 
   return (
     <div className={`relative aspect-square select-none ${className}`}>

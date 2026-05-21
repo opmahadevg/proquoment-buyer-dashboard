@@ -2,7 +2,21 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Package, Building2, Settings, ChevronLeft, ChevronRight, Sparkles, LogOut, FileText, DollarSign, ShoppingCart, Ship, MessageSquare } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Package,
+  Building2,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  LogOut,
+  FileText,
+  DollarSign,
+  ShoppingCart,
+  Ship,
+  MessageSquare,
+} from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import NotificationCenter from './NotificationCenter';
 
@@ -56,7 +70,11 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
       <div className="flex items-center px-3 py-3 border-b border-[var(--border)] min-h-[56px] overflow-hidden">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden">
-            <img src="/proquoment-logo.png" alt="Proquoment" className="w-full h-full object-cover" />
+            <img
+              src="/proquoment-logo.png"
+              alt="Proquoment"
+              className="w-full h-full object-cover"
+            />
           </div>
           <div
             className="overflow-hidden"
@@ -79,7 +97,9 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
         <Link
           href="/"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
-            isActive('/') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
+            isActive('/')
+              ? 'bg-[var(--secondary)] text-primary'
+              : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
           }`}
         >
           <LayoutDashboard size={18} className="flex-shrink-0" />
@@ -112,7 +132,6 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
           )}
         </div>
 
-
         {/* Products */}
         <Link
           href="/products-list"
@@ -140,7 +159,9 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
         <Link
           href="/organization"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
-            isActive('/organization') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
+            isActive('/organization')
+              ? 'bg-[var(--secondary)] text-primary'
+              : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
           }`}
         >
           <Building2 size={18} className="flex-shrink-0" />
@@ -159,51 +180,122 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
 
         {/* ── Procurement Section ── */}
         <div className="pt-3 mt-3 border-t border-[var(--border)]">
-          <div className="overflow-hidden" style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0, transition: 'max-width 0.28s, opacity 0.2s' }}>
-            <span className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-widest">Procurement</span>
+          <div
+            className="overflow-hidden"
+            style={{
+              maxWidth: open ? '160px' : '0px',
+              opacity: open ? 1 : 0,
+              transition: 'max-width 0.28s, opacity 0.2s',
+            }}
+          >
+            <span className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
+              Procurement
+            </span>
           </div>
         </div>
 
         {/* RFQ */}
-        <Link href="/rfq" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/rfq') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}>
+        <Link
+          href="/rfq"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/rfq') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}
+        >
           <FileText size={18} className="flex-shrink-0" />
-          <span className="whitespace-nowrap overflow-hidden transition-all duration-200" style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}>My RFQs</span>
-          {!open && <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">My RFQs</div>}
+          <span
+            className="whitespace-nowrap overflow-hidden transition-all duration-200"
+            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
+          >
+            My RFQs
+          </span>
+          {!open && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
+              My RFQs
+            </div>
+          )}
         </Link>
 
         {/* Quotes */}
-        <Link href="/quotes" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/quotes') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}>
+        <Link
+          href="/quotes"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/quotes') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}
+        >
           <DollarSign size={18} className="flex-shrink-0" />
-          <span className="whitespace-nowrap overflow-hidden transition-all duration-200" style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}>Quotes</span>
-          {!open && <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">Quotes</div>}
+          <span
+            className="whitespace-nowrap overflow-hidden transition-all duration-200"
+            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
+          >
+            Quotes
+          </span>
+          {!open && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
+              Quotes
+            </div>
+          )}
         </Link>
 
         {/* Orders */}
-        <Link href="/orders" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/orders') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}>
+        <Link
+          href="/orders"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/orders') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}
+        >
           <ShoppingCart size={18} className="flex-shrink-0" />
-          <span className="whitespace-nowrap overflow-hidden transition-all duration-200" style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}>My Orders</span>
-          {!open && <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">My Orders</div>}
+          <span
+            className="whitespace-nowrap overflow-hidden transition-all duration-200"
+            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
+          >
+            My Orders
+          </span>
+          {!open && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
+              My Orders
+            </div>
+          )}
         </Link>
 
         {/* Shipments */}
-        <Link href="/shipments" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/shipments') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}>
+        <Link
+          href="/shipments"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/shipments') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}
+        >
           <Ship size={18} className="flex-shrink-0" />
-          <span className="whitespace-nowrap overflow-hidden transition-all duration-200" style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}>Shipments</span>
-          {!open && <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">Shipments</div>}
+          <span
+            className="whitespace-nowrap overflow-hidden transition-all duration-200"
+            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
+          >
+            Shipments
+          </span>
+          {!open && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
+              Shipments
+            </div>
+          )}
         </Link>
 
         {/* Messages */}
-        <Link href="/messages" className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/messages') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}>
+        <Link
+          href="/messages"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/messages') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}
+        >
           <MessageSquare size={18} className="flex-shrink-0" />
-          <span className="whitespace-nowrap overflow-hidden transition-all duration-200" style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}>Messages</span>
-          {!open && <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">Messages</div>}
+          <span
+            className="whitespace-nowrap overflow-hidden transition-all duration-200"
+            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
+          >
+            Messages
+          </span>
+          {!open && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
+              Messages
+            </div>
+          )}
         </Link>
 
         {/* ── End Procurement Section ── */}
         <Link
           href="/account"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
-            isActive('/account') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
+            isActive('/account')
+              ? 'bg-[var(--secondary)] text-primary'
+              : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
           }`}
         >
           <Settings size={18} className="flex-shrink-0" />

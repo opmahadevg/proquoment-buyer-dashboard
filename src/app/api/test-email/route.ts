@@ -27,7 +27,10 @@ export async function GET(request: NextRequest) {
     const data = await res.json();
 
     if (!res.ok) {
-      return NextResponse.json({ success: false, status: res.status, error: data }, { status: 200 });
+      return NextResponse.json(
+        { success: false, status: res.status, error: data },
+        { status: 200 }
+      );
     }
 
     return NextResponse.json({ success: true, message: `Email sent to ${to}`, data });

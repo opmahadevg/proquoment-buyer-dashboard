@@ -27,8 +27,7 @@ export default function KpiCard({
 }: KpiCardProps) {
   const trendColor =
     trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-red-500' : 'text-gray-400';
-  const TrendIcon =
-    trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
+  const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
 
   const inner = (
     <div
@@ -43,15 +42,15 @@ export default function KpiCard({
         <p className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
           {label}
         </p>
-        <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center transition-transform duration-200 group-hover:scale-110`}>
+        <div
+          className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center transition-transform duration-200 group-hover:scale-110`}
+        >
           {icon}
         </div>
       </div>
       <div>
         <p className="text-3xl font-bold text-[var(--foreground)] tabular-nums">{value}</p>
-        {subValue && (
-          <p className="text-xs text-[var(--muted-foreground)] mt-1">{subValue}</p>
-        )}
+        {subValue && <p className="text-xs text-[var(--muted-foreground)] mt-1">{subValue}</p>}
       </div>
       <div className="flex items-center justify-between">
         {trendValue && (
@@ -61,14 +60,21 @@ export default function KpiCard({
           </div>
         )}
         {href && (
-          <ArrowRight size={13} className="text-[var(--muted-foreground)] opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
+          <ArrowRight
+            size={13}
+            className="text-[var(--muted-foreground)] opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
+          />
         )}
       </div>
     </div>
   );
 
   if (href) {
-    return <Link href={href} className="block">{inner}</Link>;
+    return (
+      <Link href={href} className="block">
+        {inner}
+      </Link>
+    );
   }
   return inner;
 }

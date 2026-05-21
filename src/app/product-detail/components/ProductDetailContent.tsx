@@ -10,14 +10,35 @@ import OrdersTab from './OrdersTab';
 import FilesTab from './FilesTab';
 import SamplesTab from './SamplesTab';
 import ChatButton from '@/components/ui/ChatButton';
-import { ChevronLeft, FileText, X, Pencil, CheckCircle, Clock, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import {
+  ChevronLeft,
+  FileText,
+  X,
+  Pencil,
+  CheckCircle,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getProductDetailData, ALL_PRODUCT_DETAIL_DATA } from '@/lib/productDetailData';
 import { getStoredProducts, saveProduct, StoredProduct } from '@/lib/productStore';
 import {
-  productService, rfqService, quoteService, orderService,
-  sampleService, fileService, updateService,
-  DbProduct, DbRfqSpec, DbQuoteStep, DbOrder, DbSample, DbProductFile, DbProductUpdate
+  productService,
+  rfqService,
+  quoteService,
+  orderService,
+  sampleService,
+  fileService,
+  updateService,
+  DbProduct,
+  DbRfqSpec,
+  DbQuoteStep,
+  DbOrder,
+  DbSample,
+  DbProductFile,
+  DbProductUpdate,
 } from '@/lib/services/dbService';
 
 type Tab = 'updates' | 'quotes' | 'samples' | 'orders' | 'files';
@@ -32,7 +53,9 @@ export default function ProductDetailContent() {
   const [editForm, setEditForm] = useState<StoredProduct | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    overview: true, specifications: true, manufacturingNotes: true,
+    overview: true,
+    specifications: true,
+    manufacturingNotes: true,
   });
 
   // Supabase data
@@ -40,9 +63,15 @@ export default function ProductDetailContent() {
   const [dbRfq, setDbRfq] = useState<DbRfqSpec | null>(null);
   const [dbQuoteSteps, setDbQuoteSteps] = useState<DbQuoteStep[]>([]);
   const [dbOrders, setDbOrders] = useState<DbOrder[]>([]);
-  const [dbSamples, setDbSamples] = useState<{ samples: DbSample[]; references: DbSample[] }>({ samples: [], references: [] });
+  const [dbSamples, setDbSamples] = useState<{ samples: DbSample[]; references: DbSample[] }>({
+    samples: [],
+    references: [],
+  });
   const [dbFiles, setDbFiles] = useState<DbProductFile[]>([]);
-  const [dbUpdates, setDbUpdates] = useState<{ tasks: DbProductUpdate[]; updates: DbProductUpdate[] }>({ tasks: [], updates: [] });
+  const [dbUpdates, setDbUpdates] = useState<{
+    tasks: DbProductUpdate[];
+    updates: DbProductUpdate[];
+  }>({ tasks: [], updates: [] });
   const [dbLoading, setDbLoading] = useState(true);
 
   const searchParams = useSearchParams();
@@ -96,48 +125,71 @@ export default function ProductDetailContent() {
     const client = createClient();
     if (!client) return;
 
-    const channel = client
-      .channel(`product-detail-realtime-${productId}`)
+    const productChannel = client
+      .channel(`product-realtime-${productId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', filter: `id=eq.${productId}` },
-        async (payload) => {
-          if (payload.table === 'products') {
-            const prod = await productService.getById(productId);
-            setDbProduct(prod);
-          }
+        { event: '*', schema: 'public', table: 'products', filter: `id=eq.${productId}` },
+        async () => {
+          const prod = await productService.getById(productId);
+          setDbProduct(prod);
         }
       )
+      .subscribe();
+
+    const globalChannel = client
+      .channel(`product-details-global-${productId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rfqs' }, async () => {
+        const rfq = await rfqService.getByProductId(productId);
+        setDbRfq(rfq);
+        const quotes = await quoteService.getByProductId(productId);
+        setDbQuoteSteps(quotes);
+        const updates = await updateService.getByProductId(productId);
+        setDbUpdates(updates);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotes' }, async () => {
+        const quotes = await quoteService.getByProductId(productId);
+        setDbQuoteSteps(quotes);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
+        const orders = await orderService.getByProductId(productId);
+        setDbOrders(orders);
+        const files = await fileService.getByProductId(productId);
+        setDbFiles(files);
+        const updates = await updateService.getByProductId(productId);
+        setDbUpdates(updates);
+      })
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', filter: `product_id=eq.${productId}` },
-        async (payload) => {
-          const table = payload.table;
-          if (table === 'rfq_specs') {
-            const rfq = await rfqService.getByProductId(productId);
-            setDbRfq(rfq);
-          } else if (table === 'quote_steps') {
-            const quotes = await quoteService.getByProductId(productId);
-            setDbQuoteSteps(quotes);
-          } else if (table === 'orders') {
-            const orders = await orderService.getByProductId(productId);
-            setDbOrders(orders);
-          } else if (table === 'samples') {
-            const samples = await sampleService.getByProductId(productId);
-            setDbSamples(samples);
-          } else if (table === 'product_files') {
-            const files = await fileService.getByProductId(productId);
-            setDbFiles(files);
-          } else if (table === 'product_updates') {
-            const updates = await updateService.getByProductId(productId);
-            setDbUpdates(updates);
-          }
+        { event: '*', schema: 'public', table: 'sample_orders' },
+        async () => {
+          const samples = await sampleService.getByProductId(productId);
+          setDbSamples(samples);
+          const files = await fileService.getByProductId(productId);
+          setDbFiles(files);
+        }
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, async () => {
+        const files = await fileService.getByProductId(productId);
+        setDbFiles(files);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'milestones' }, async () => {
+        const updates = await updateService.getByProductId(productId);
+        setDbUpdates(updates);
+      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications' },
+        async () => {
+          const updates = await updateService.getByProductId(productId);
+          setDbUpdates(updates);
         }
       )
       .subscribe();
 
     return () => {
-      client.removeChannel(channel);
+      client.removeChannel(productChannel);
+      client.removeChannel(globalChannel);
     };
   }, [productId]);
 
@@ -152,42 +204,72 @@ export default function ProductDetailContent() {
         stage: dbProduct.stage,
         updates: {
           tasks: dbUpdates.tasks.map((t) => ({
-            id: t.id, type: t.updateType, title: t.title,
-            description: t.description, date: t.updateDate,
-            supplier: t.supplier, replies: t.replies,
+            id: t.id,
+            type: t.updateType,
+            title: t.title,
+            description: t.description,
+            date: t.updateDate,
+            supplier: t.supplier,
+            replies: t.replies,
           })),
           updates: dbUpdates.updates.map((u) => ({
-            id: u.id, title: u.title, description: u.description,
-            date: u.updateDate, supplier: u.supplier, replies: u.replies,
+            id: u.id,
+            title: u.title,
+            description: u.description,
+            date: u.updateDate,
+            supplier: u.supplier,
+            replies: u.replies,
           })),
         },
         quotes: {
           steps: dbQuoteSteps.map((s) => ({
-            id: s.stepOrder, label: s.label, highlight: s.highlight,
-            highlightSuffix: s.highlightSuffix, description: s.description,
-            status: s.stepStatus, inProgress: s.inProgress,
+            id: s.stepOrder,
+            label: s.label,
+            highlight: s.highlight,
+            highlightSuffix: s.highlightSuffix,
+            description: s.description,
+            status: s.stepStatus,
+            inProgress: s.inProgress,
           })),
           supplierCount: dbQuoteSteps[0]?.supplierCount ?? 0,
           totalSuppliers: dbQuoteSteps[0]?.totalSuppliers ?? 0,
         },
         orders: {
           orders: dbOrders.map((o) => ({
-            id: o.id, orderNumber: o.orderNumber, description: o.description,
-            status: o.orderStatus, statusColor: o.statusColor, supplier: o.supplier,
-            placedDate: o.placedDate, estimatedDelivery: o.estimatedDelivery, amount: o.amount,
+            id: o.id,
+            orderNumber: o.orderNumber,
+            description: o.description,
+            status: o.orderStatus,
+            statusColor: o.statusColor,
+            supplier: o.supplier,
+            placedDate: o.placedDate,
+            estimatedDelivery: o.estimatedDelivery,
+            amount: o.amount,
           })),
           steps: dbOrders[0]?.steps ?? [],
         },
         files: dbFiles.map((f) => ({ id: f.id, name: f.name, date: f.fileDate })),
         samples: {
           samples: dbSamples.samples.map((s) => ({
-            id: s.id, image: s.image, imageAlt: s.imageAlt, name: s.name,
-            type: s.sampleType, supplier: s.supplier, stage: s.stage,
-            requested: s.requested, completion: s.completion,
+            id: s.id,
+            image: s.image,
+            imageAlt: s.imageAlt,
+            name: s.name,
+            type: s.sampleType,
+            supplier: s.supplier,
+            stage: s.stage,
+            requested: s.requested,
+            completion: s.completion,
           })),
           references: dbSamples.references.map((r) => ({
-            id: r.id, image: r.image, imageAlt: r.imageAlt, name: r.name,
-            type: r.sampleType, creator: r.creator, stage: r.stage, requested: r.requested,
+            id: r.id,
+            image: r.image,
+            imageAlt: r.imageAlt,
+            name: r.name,
+            type: r.sampleType,
+            creator: r.creator,
+            stage: r.stage,
+            requested: r.requested,
           })),
         },
       };
@@ -195,8 +277,11 @@ export default function ProductDetailContent() {
     if (staticProduct) return staticProduct;
     if (storedProduct) {
       return {
-        id: storedProduct.id, name: storedProduct.name, image: storedProduct.image,
-        imageAlt: storedProduct.imageAlt, stage: storedProduct.stage,
+        id: storedProduct.id,
+        name: storedProduct.name,
+        image: storedProduct.image,
+        imageAlt: storedProduct.imageAlt,
+        stage: storedProduct.stage,
         updates: {
           tasks: [],
           updates: [
@@ -260,7 +345,16 @@ export default function ProductDetailContent() {
       };
     }
     return FALLBACK_PRODUCT;
-  }, [staticProduct, dbProduct, dbUpdates, dbQuoteSteps, dbOrders, dbFiles, dbSamples, storedProduct]);
+  }, [
+    staticProduct,
+    dbProduct,
+    dbUpdates,
+    dbQuoteSteps,
+    dbOrders,
+    dbFiles,
+    dbSamples,
+    storedProduct,
+  ]);
 
   // Determine effective RFQ data (DB takes priority over localStorage)
   const effectiveRfq = useMemo(() => {
@@ -288,9 +382,21 @@ export default function ProductDetailContent() {
   }, [dbRfq, dbProduct, storedProduct]);
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
-    { id: 'updates', label: 'Updates', badge: (product?.updates?.tasks?.length ?? 0) + (product?.updates?.updates?.length ?? 0) },
-    { id: 'quotes', label: 'Quotes', badge: product?.quotes?.steps?.filter((s) => s?.status === 'completed')?.length },
-    { id: 'samples', label: 'Samples', badge: (product?.samples?.samples?.length ?? 0) || undefined },
+    {
+      id: 'updates',
+      label: 'Updates',
+      badge: (product?.updates?.tasks?.length ?? 0) + (product?.updates?.updates?.length ?? 0),
+    },
+    {
+      id: 'quotes',
+      label: 'Quotes',
+      badge: product?.quotes?.steps?.filter((s) => s?.status === 'completed')?.length,
+    },
+    {
+      id: 'samples',
+      label: 'Samples',
+      badge: (product?.samples?.samples?.length ?? 0) || undefined,
+    },
     { id: 'orders', label: 'Orders', badge: product?.orders?.orders?.length || undefined },
     { id: 'files', label: 'Files', badge: product?.files?.length || undefined },
   ];
@@ -313,13 +419,23 @@ export default function ProductDetailContent() {
 
   const updateSpecValue = (index: number, value: string) => {
     if (!editForm) return;
-    const updated = { ...editForm, specifications: editForm.specifications.map((s, i) => i === index ? { ...s, value, pending: !value || value === '(Pending)' } : s) };
+    const updated = {
+      ...editForm,
+      specifications: editForm.specifications.map((s, i) =>
+        i === index ? { ...s, value, pending: !value || value === '(Pending)' } : s
+      ),
+    };
     setEditForm(updated);
   };
 
   const updateNoteValue = (index: number, value: string) => {
     if (!editForm) return;
-    const updated = { ...editForm, manufacturingNotes: editForm.manufacturingNotes.map((n, i) => i === index ? { ...n, value, pending: !value || value === '(Pending)' } : n) };
+    const updated = {
+      ...editForm,
+      manufacturingNotes: editForm.manufacturingNotes.map((n, i) =>
+        i === index ? { ...n, value, pending: !value || value === '(Pending)' } : n
+      ),
+    };
     setEditForm(updated);
   };
 
@@ -328,8 +444,11 @@ export default function ProductDetailContent() {
   };
 
   const filledCount = effectiveRfq
-    ? effectiveRfq.specifications.filter((s) => !s.pending && s.value && s.value !== '(Pending)').length +
-      effectiveRfq.manufacturingNotes.filter((n) => !n.pending && n.value && n.value !== '(Pending)').length
+    ? effectiveRfq.specifications.filter((s) => !s.pending && s.value && s.value !== '(Pending)')
+        .length +
+      effectiveRfq.manufacturingNotes.filter(
+        (n) => !n.pending && n.value && n.value !== '(Pending)'
+      ).length
     : 0;
   const totalCount = effectiveRfq
     ? effectiveRfq.specifications.length + effectiveRfq.manufacturingNotes.length
@@ -348,7 +467,13 @@ export default function ProductDetailContent() {
             <ChevronLeft size={20} />
           </Link>
           <div className="w-10 h-10 rounded-lg overflow-hidden bg-[var(--muted)] flex-shrink-0">
-            <AppImage src={product?.image} alt={product?.imageAlt} width={40} height={40} className="w-full h-full object-cover" />
+            <AppImage
+              src={product?.image}
+              alt={product?.imageAlt}
+              width={40}
+              height={40}
+              className="w-full h-full object-cover"
+            />
           </div>
           <h1 className="text-xl font-bold text-[var(--foreground)]">{product?.name}</h1>
           <StageBadge stage={product?.stage} />
@@ -380,7 +505,9 @@ export default function ProductDetailContent() {
               key={`pdtab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all duration-150 -mb-px ${
-                activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+                activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
               }`}
             >
               {tab.label}
@@ -402,14 +529,23 @@ export default function ProductDetailContent() {
       ) : (
         <div key={activeTab} className="animate-fade-in">
           {activeTab === 'updates' && (
-            <UpdatesTab tasks={product?.updates?.tasks ?? []} updates={product?.updates?.updates ?? []} />
+            <UpdatesTab
+              tasks={product?.updates?.tasks ?? []}
+              updates={product?.updates?.updates ?? []}
+            />
           )}
           {activeTab === 'quotes' && <QuotesTab steps={product?.quotes?.steps ?? []} />}
           {activeTab === 'samples' && (
-            <SamplesTab samples={product?.samples?.samples ?? []} references={product?.samples?.references ?? []} />
+            <SamplesTab
+              samples={product?.samples?.samples ?? []}
+              references={product?.samples?.references ?? []}
+            />
           )}
           {activeTab === 'orders' && (
-            <OrdersTab orders={product?.orders?.orders ?? []} steps={product?.orders?.steps ?? []} />
+            <OrdersTab
+              orders={product?.orders?.orders ?? []}
+              steps={product?.orders?.steps ?? []}
+            />
           )}
           {activeTab === 'files' && <FilesTab files={product?.files ?? []} />}
         </div>
@@ -420,7 +556,10 @@ export default function ProductDetailContent() {
       {/* ── Product Specs Slide-over Panel ── */}
       {specsOpen && (
         <div className="fixed inset-0 z-50 flex animate-fade-in">
-          <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setSpecsOpen(false)} />
+          <div
+            className="flex-1 bg-black/40 backdrop-blur-sm"
+            onClick={() => setSpecsOpen(false)}
+          />
           <div className="w-full max-w-lg bg-[var(--background)] shadow-2xl flex flex-col h-full overflow-hidden animate-slide-in-right">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--background)]">
               <div>
@@ -439,7 +578,10 @@ export default function ProductDetailContent() {
                     Update RFQ
                   </button>
                 )}
-                <button onClick={() => setSpecsOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--muted)] transition-colors text-[var(--muted-foreground)]">
+                <button
+                  onClick={() => setSpecsOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-[var(--muted)] transition-colors text-[var(--muted-foreground)]"
+                >
                   <X size={18} />
                 </button>
               </div>
@@ -451,11 +593,16 @@ export default function ProductDetailContent() {
                   {/* Completion bar */}
                   <div className="bg-[var(--muted)]/50 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-[var(--foreground)]">RFQ Completion</span>
+                      <span className="text-xs font-semibold text-[var(--foreground)]">
+                        RFQ Completion
+                      </span>
                       <span className="text-xs font-bold text-primary">{completionPct}%</span>
                     </div>
                     <div className="w-full h-2 bg-[var(--border)] rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${completionPct}%` }} />
+                      <div
+                        className="h-full bg-primary rounded-full transition-all duration-500"
+                        style={{ width: `${completionPct}%` }}
+                      />
                     </div>
                     <p className="text-xs text-[var(--muted-foreground)] mt-1.5">
                       {filledCount} of {totalCount} fields filled
@@ -464,9 +611,18 @@ export default function ProductDetailContent() {
 
                   {/* Overview section */}
                   <div className="border border-[var(--border)] rounded-xl overflow-hidden">
-                    <button onClick={() => toggleSection('overview')} className="w-full flex items-center justify-between px-4 py-3 bg-[var(--muted)]/30 hover:bg-[var(--muted)]/50 transition-colors">
-                      <span className="text-sm font-semibold text-[var(--foreground)]">Overview</span>
-                      {expandedSections.overview ? <ChevronUp size={15} className="text-[var(--muted-foreground)]" /> : <ChevronDown size={15} className="text-[var(--muted-foreground)]" />}
+                    <button
+                      onClick={() => toggleSection('overview')}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-[var(--muted)]/30 hover:bg-[var(--muted)]/50 transition-colors"
+                    >
+                      <span className="text-sm font-semibold text-[var(--foreground)]">
+                        Overview
+                      </span>
+                      {expandedSections.overview ? (
+                        <ChevronUp size={15} className="text-[var(--muted-foreground)]" />
+                      ) : (
+                        <ChevronDown size={15} className="text-[var(--muted-foreground)]" />
+                      )}
                     </button>
                     {expandedSections.overview && (
                       <div className="divide-y divide-[var(--border)]">
@@ -481,14 +637,28 @@ export default function ProductDetailContent() {
                   {/* Specifications section */}
                   {effectiveRfq.specifications.length > 0 && (
                     <div className="border border-[var(--border)] rounded-xl overflow-hidden">
-                      <button onClick={() => toggleSection('specifications')} className="w-full flex items-center justify-between px-4 py-3 bg-[var(--muted)]/30 hover:bg-[var(--muted)]/50 transition-colors">
-                        <span className="text-sm font-semibold text-[var(--foreground)]">Specifications</span>
-                        {expandedSections.specifications ? <ChevronUp size={15} className="text-[var(--muted-foreground)]" /> : <ChevronDown size={15} className="text-[var(--muted-foreground)]" />}
+                      <button
+                        onClick={() => toggleSection('specifications')}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-[var(--muted)]/30 hover:bg-[var(--muted)]/50 transition-colors"
+                      >
+                        <span className="text-sm font-semibold text-[var(--foreground)]">
+                          Specifications
+                        </span>
+                        {expandedSections.specifications ? (
+                          <ChevronUp size={15} className="text-[var(--muted-foreground)]" />
+                        ) : (
+                          <ChevronDown size={15} className="text-[var(--muted-foreground)]" />
+                        )}
                       </button>
                       {expandedSections.specifications && (
                         <div className="divide-y divide-[var(--border)]">
                           {effectiveRfq.specifications.map((spec, i) => (
-                            <RfqRow key={i} label={spec.label} value={spec.value} pending={spec.pending} />
+                            <RfqRow
+                              key={i}
+                              label={spec.label}
+                              value={spec.value}
+                              pending={spec.pending}
+                            />
                           ))}
                         </div>
                       )}
@@ -498,14 +668,28 @@ export default function ProductDetailContent() {
                   {/* Manufacturing Notes section */}
                   {effectiveRfq.manufacturingNotes.length > 0 && (
                     <div className="border border-[var(--border)] rounded-xl overflow-hidden">
-                      <button onClick={() => toggleSection('manufacturingNotes')} className="w-full flex items-center justify-between px-4 py-3 bg-[var(--muted)]/30 hover:bg-[var(--muted)]/50 transition-colors">
-                        <span className="text-sm font-semibold text-[var(--foreground)]">Manufacturing Notes</span>
-                        {expandedSections.manufacturingNotes ? <ChevronUp size={15} className="text-[var(--muted-foreground)]" /> : <ChevronDown size={15} className="text-[var(--muted-foreground)]" />}
+                      <button
+                        onClick={() => toggleSection('manufacturingNotes')}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-[var(--muted)]/30 hover:bg-[var(--muted)]/50 transition-colors"
+                      >
+                        <span className="text-sm font-semibold text-[var(--foreground)]">
+                          Manufacturing Notes
+                        </span>
+                        {expandedSections.manufacturingNotes ? (
+                          <ChevronUp size={15} className="text-[var(--muted-foreground)]" />
+                        ) : (
+                          <ChevronDown size={15} className="text-[var(--muted-foreground)]" />
+                        )}
                       </button>
                       {expandedSections.manufacturingNotes && (
                         <div className="divide-y divide-[var(--border)]">
                           {effectiveRfq.manufacturingNotes.map((note, i) => (
-                            <RfqRow key={i} label={note.label} value={note.value} pending={note.pending} />
+                            <RfqRow
+                              key={i}
+                              label={note.label}
+                              value={note.value}
+                              pending={note.pending}
+                            />
                           ))}
                         </div>
                       )}
@@ -517,9 +701,12 @@ export default function ProductDetailContent() {
                   <div className="w-14 h-14 rounded-full bg-[var(--muted)] flex items-center justify-center mb-4">
                     <FileText size={24} className="text-[var(--muted-foreground)]" />
                   </div>
-                  <p className="text-sm font-semibold text-[var(--foreground)] mb-1">No RFQ data available</p>
+                  <p className="text-sm font-semibold text-[var(--foreground)] mb-1">
+                    No RFQ data available
+                  </p>
                   <p className="text-xs text-[var(--muted-foreground)] max-w-[240px]">
-                    RFQ specifications are available for products created through the AI sourcing flow.
+                    RFQ specifications are available for products created through the AI sourcing
+                    flow.
                   </p>
                 </div>
               )}
@@ -531,35 +718,71 @@ export default function ProductDetailContent() {
       {/* ── Update RFQ Modal ── */}
       {editOpen && editForm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setEditOpen(false)}
+          />
           <div className="relative bg-[var(--background)] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-in">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
               <div>
                 <h2 className="text-base font-bold text-[var(--foreground)]">Update RFQ</h2>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Edit your product requirements and specifications</p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  Edit your product requirements and specifications
+                </p>
               </div>
-              <button onClick={() => setEditOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--muted)] transition-colors text-[var(--muted-foreground)]">
+              <button
+                onClick={() => setEditOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-[var(--muted)] transition-colors text-[var(--muted-foreground)]"
+              >
                 <X size={18} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Overview</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">
+                  Overview
+                </h3>
                 <div className="space-y-3">
-                  <EditField label="Product Name" value={editForm.name} onChange={(v) => setEditForm({ ...editForm, name: v })} />
-                  <EditField label="Category" value={editForm.category} onChange={(v) => setEditForm({ ...editForm, category: v })} />
-                  <EditField label="Description" value={editForm.description} onChange={(v) => setEditForm({ ...editForm, description: v })} multiline />
-                  <EditField label="MOQ" value={editForm.moq} onChange={(v) => setEditForm({ ...editForm, moq: v })} placeholder="e.g. 500 units" />
+                  <EditField
+                    label="Product Name"
+                    value={editForm.name}
+                    onChange={(v) => setEditForm({ ...editForm, name: v })}
+                  />
+                  <EditField
+                    label="Category"
+                    value={editForm.category}
+                    onChange={(v) => setEditForm({ ...editForm, category: v })}
+                  />
+                  <EditField
+                    label="Description"
+                    value={editForm.description}
+                    onChange={(v) => setEditForm({ ...editForm, description: v })}
+                    multiline
+                  />
+                  <EditField
+                    label="MOQ"
+                    value={editForm.moq}
+                    onChange={(v) => setEditForm({ ...editForm, moq: v })}
+                    placeholder="e.g. 500 units"
+                  />
                 </div>
               </div>
 
               {editForm.specifications.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Specifications</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">
+                    Specifications
+                  </h3>
                   <div className="space-y-3">
                     {editForm.specifications.map((spec, i) => (
-                      <EditField key={i} label={spec.label} value={spec.value === '(Pending)' ? '' : spec.value} onChange={(v) => updateSpecValue(i, v)} placeholder="(Pending)" />
+                      <EditField
+                        key={i}
+                        label={spec.label}
+                        value={spec.value === '(Pending)' ? '' : spec.value}
+                        onChange={(v) => updateSpecValue(i, v)}
+                        placeholder="(Pending)"
+                      />
                     ))}
                   </div>
                 </div>
@@ -567,10 +790,18 @@ export default function ProductDetailContent() {
 
               {editForm.manufacturingNotes.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">Manufacturing Notes</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">
+                    Manufacturing Notes
+                  </h3>
                   <div className="space-y-3">
                     {editForm.manufacturingNotes.map((note, i) => (
-                      <EditField key={i} label={note.label} value={note.value === '(Pending)' ? '' : note.value} onChange={(v) => updateNoteValue(i, v)} placeholder="(Pending)" />
+                      <EditField
+                        key={i}
+                        label={note.label}
+                        value={note.value === '(Pending)' ? '' : note.value}
+                        onChange={(v) => updateNoteValue(i, v)}
+                        placeholder="(Pending)"
+                      />
                     ))}
                   </div>
                 </div>
@@ -578,10 +809,16 @@ export default function ProductDetailContent() {
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border)] bg-[var(--muted)]/20">
-              <button onClick={() => setEditOpen(false)} className="px-4 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] rounded-lg transition-colors">
+              <button
+                onClick={() => setEditOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] rounded-lg transition-colors"
+              >
                 Cancel
               </button>
-              <button onClick={handleSave} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors">
+              <button
+                onClick={handleSave}
+                className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
+              >
                 Save Changes
               </button>
             </div>
@@ -592,17 +829,27 @@ export default function ProductDetailContent() {
   );
 }
 
-interface RfqRowProps { label: string; value: string; pending?: boolean; }
+interface RfqRowProps {
+  label: string;
+  value: string;
+  pending?: boolean;
+}
 function RfqRow({ label, value, pending }: RfqRowProps) {
   const isEmpty = !value || value === '(Pending)' || pending;
   return (
     <div className="flex items-start gap-3 px-4 py-3">
       <div className="flex-shrink-0 mt-0.5">
-        {isEmpty ? <Clock size={13} className="text-[var(--muted-foreground)]" /> : <CheckCircle size={13} className="text-emerald-500" />}
+        {isEmpty ? (
+          <Clock size={13} className="text-[var(--muted-foreground)]" />
+        ) : (
+          <CheckCircle size={13} className="text-emerald-500" />
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-[var(--muted-foreground)] mb-0.5">{label}</p>
-        <p className={`text-sm ${isEmpty ? 'text-[var(--muted-foreground)] italic' : 'text-[var(--foreground)] font-medium'}`}>
+        <p
+          className={`text-sm ${isEmpty ? 'text-[var(--muted-foreground)] italic' : 'text-[var(--foreground)] font-medium'}`}
+        >
           {isEmpty ? 'Pending' : value}
         </p>
       </div>
@@ -610,17 +857,41 @@ function RfqRow({ label, value, pending }: RfqRowProps) {
   );
 }
 
-interface EditFieldProps { label: string; value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; }
-function EditField({ label, value, onChange, placeholder = '', multiline = false }: EditFieldProps) {
+interface EditFieldProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  multiline?: boolean;
+}
+function EditField({
+  label,
+  value,
+  onChange,
+  placeholder = '',
+  multiline = false,
+}: EditFieldProps) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1">{label}</label>
+      <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1">
+        {label}
+      </label>
       {multiline ? (
-        <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder || label} rows={3}
-          className="w-full px-3 py-2 text-sm bg-[var(--background)] border border-[var(--border)] rounded-lg text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors resize-none" />
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder || label}
+          rows={3}
+          className="w-full px-3 py-2 text-sm bg-[var(--background)] border border-[var(--border)] rounded-lg text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors resize-none"
+        />
       ) : (
-        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder || label}
-          className="w-full px-3 py-2 text-sm bg-[var(--background)] border border-[var(--border)] rounded-lg text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder || label}
+          className="w-full px-3 py-2 text-sm bg-[var(--background)] border border-[var(--border)] rounded-lg text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+        />
       )}
     </div>
   );

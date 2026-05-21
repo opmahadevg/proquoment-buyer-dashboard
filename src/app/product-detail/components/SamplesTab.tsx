@@ -32,12 +32,18 @@ interface SamplesTabProps {
 
 const stageBadgeColor = (stage: string) => {
   switch (stage.toLowerCase()) {
-    case 'approved': return 'bg-green-100 text-green-700';
-    case 'pending': return 'bg-yellow-100 text-yellow-700';
-    case 'in review': return 'bg-blue-100 text-blue-700';
-    case 'rejected': return 'bg-red-100 text-red-700';
-    case 'shipped': return 'bg-purple-100 text-purple-700';
-    default: return 'bg-gray-100 text-gray-600';
+    case 'approved':
+      return 'bg-green-100 text-green-700';
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-700';
+    case 'in review':
+      return 'bg-blue-100 text-blue-700';
+    case 'rejected':
+      return 'bg-red-100 text-red-700';
+    case 'shipped':
+      return 'bg-purple-100 text-purple-700';
+    default:
+      return 'bg-gray-100 text-gray-600';
   }
 };
 
@@ -62,9 +68,13 @@ export default function SamplesTab({ samples, references }: SamplesTabProps) {
         {/* Table */}
         <div className="w-full">
           <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr] gap-x-4 pb-2 border-b border-[var(--border)]">
-            {['Images', 'Name', 'Type', 'Supplier', 'Stage', 'Requested', 'Completion'].map((col) => (
-              <span key={col} className="text-sm text-[var(--muted-foreground)]">{col}</span>
-            ))}
+            {['Images', 'Name', 'Type', 'Supplier', 'Stage', 'Requested', 'Completion'].map(
+              (col) => (
+                <span key={col} className="text-sm text-[var(--muted-foreground)]">
+                  {col}
+                </span>
+              )
+            )}
           </div>
 
           {samples.length === 0 ? (
@@ -74,7 +84,10 @@ export default function SamplesTab({ samples, references }: SamplesTabProps) {
           ) : (
             <div className="divide-y divide-[var(--border)]">
               {samples.map((sample) => (
-                <div key={sample.id} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr] gap-x-4 py-3 items-center">
+                <div
+                  key={sample.id}
+                  className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr] gap-x-4 py-3 items-center"
+                >
                   <div className="w-12 h-12 rounded-lg overflow-hidden bg-[var(--muted)] flex-shrink-0">
                     <AppImage
                       src={sample.image}
@@ -84,14 +97,20 @@ export default function SamplesTab({ samples, references }: SamplesTabProps) {
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <span className="text-sm font-medium text-[var(--foreground)] truncate">{sample.name}</span>
+                  <span className="text-sm font-medium text-[var(--foreground)] truncate">
+                    {sample.name}
+                  </span>
                   <span className="text-sm text-[var(--muted-foreground)]">{sample.type}</span>
                   <span className="text-sm text-[var(--muted-foreground)]">{sample.supplier}</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${stageBadgeColor(sample.stage)}`}>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${stageBadgeColor(sample.stage)}`}
+                  >
                     {sample.stage}
                   </span>
                   <span className="text-sm text-[var(--muted-foreground)]">{sample.requested}</span>
-                  <span className="text-sm text-[var(--muted-foreground)]">{sample.completion}</span>
+                  <span className="text-sm text-[var(--muted-foreground)]">
+                    {sample.completion}
+                  </span>
                 </div>
               ))}
             </div>
@@ -112,7 +131,9 @@ export default function SamplesTab({ samples, references }: SamplesTabProps) {
         <div className="w-full">
           <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] gap-x-4 pb-2 border-b border-[var(--border)]">
             {['Images', 'Name', 'Type', 'Creator', 'Stage', 'Requested'].map((col) => (
-              <span key={col} className="text-sm text-[var(--muted-foreground)]">{col}</span>
+              <span key={col} className="text-sm text-[var(--muted-foreground)]">
+                {col}
+              </span>
             ))}
           </div>
 
@@ -123,7 +144,10 @@ export default function SamplesTab({ samples, references }: SamplesTabProps) {
           ) : (
             <div className="divide-y divide-[var(--border)]">
               {references.map((ref) => (
-                <div key={ref.id} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] gap-x-4 py-3 items-center">
+                <div
+                  key={ref.id}
+                  className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] gap-x-4 py-3 items-center"
+                >
                   <div className="w-12 h-12 rounded-lg overflow-hidden bg-[var(--muted)] flex-shrink-0">
                     <AppImage
                       src={ref.image}
@@ -133,10 +157,14 @@ export default function SamplesTab({ samples, references }: SamplesTabProps) {
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <span className="text-sm font-medium text-[var(--foreground)] truncate">{ref.name}</span>
+                  <span className="text-sm font-medium text-[var(--foreground)] truncate">
+                    {ref.name}
+                  </span>
                   <span className="text-sm text-[var(--muted-foreground)]">{ref.type}</span>
                   <span className="text-sm text-[var(--muted-foreground)]">{ref.creator}</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${stageBadgeColor(ref.stage)}`}>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${stageBadgeColor(ref.stage)}`}
+                  >
                     {ref.stage}
                   </span>
                   <span className="text-sm text-[var(--muted-foreground)]">{ref.requested}</span>

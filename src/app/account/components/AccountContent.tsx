@@ -21,7 +21,9 @@ interface FieldProps {
 function Field({ label, name, value, onChange, placeholder, type = 'text' }: FieldProps) {
   return (
     <div>
-      <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">
+        {label}
+      </label>
       <input
         type={type}
         value={value}
@@ -44,7 +46,9 @@ interface TextAreaFieldProps {
 function TextAreaField({ label, name, value, onChange, placeholder }: TextAreaFieldProps) {
   return (
     <div>
-      <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">
+        {label}
+      </label>
       <textarea
         value={value}
         onChange={(e) => onChange(name, e.target.value)}
@@ -103,7 +107,9 @@ export default function AccountContent() {
 
     let profileSub: any;
     const setupRealtime = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       profileSub = supabase
@@ -214,10 +220,15 @@ export default function AccountContent() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl md:text-2xl font-bold text-[var(--foreground)]">Account</h1>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-              verificationStatus === 'verified' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-              verificationStatus === 'rejected' ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
-            }`}>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                verificationStatus === 'verified'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : verificationStatus === 'rejected'
+                    ? 'bg-red-100 text-red-800 border border-red-200'
+                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+              }`}
+            >
               {verificationStatus}
             </span>
           </div>
@@ -239,19 +250,63 @@ export default function AccountContent() {
             {(form.name || 'O').charAt(0).toUpperCase()}
           </div>
           <div>
-            <p className="text-sm font-semibold text-[var(--foreground)]">{form.name || 'Organization Name'}</p>
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              {form.name || 'Organization Name'}
+            </p>
             <p className="text-xs text-[var(--muted-foreground)]">{form.legalName}</p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-          <Field label="Organization Name" name="name" value={form.name} onChange={handleChange} placeholder="e.g. Honey's Org" />
-          <Field label="Legal Name" name="legalName" value={form.legalName} onChange={handleChange} placeholder="e.g. Honey Enterprises Pvt. Ltd." />
-          <Field label="Company Type" name="type" value={form.type} onChange={handleChange} placeholder="e.g. Private Limited Company" />
-          <Field label="Industry" name="industry" value={form.industry} onChange={handleChange} placeholder="e.g. Textile & Apparel" />
-          <Field label="Founded Year" name="founded" value={form.founded} onChange={handleChange} placeholder="e.g. 2018" />
-          <Field label="Team Size" name="teamSize" value={form.teamSize} onChange={handleChange} placeholder="e.g. 12–50 employees" />
+          <Field
+            label="Organization Name"
+            name="name"
+            value={form.name}
+            onChange={handleChange}
+            placeholder="e.g. Honey's Org"
+          />
+          <Field
+            label="Legal Name"
+            name="legalName"
+            value={form.legalName}
+            onChange={handleChange}
+            placeholder="e.g. Honey Enterprises Pvt. Ltd."
+          />
+          <Field
+            label="Company Type"
+            name="type"
+            value={form.type}
+            onChange={handleChange}
+            placeholder="e.g. Private Limited Company"
+          />
+          <Field
+            label="Industry"
+            name="industry"
+            value={form.industry}
+            onChange={handleChange}
+            placeholder="e.g. Textile & Apparel"
+          />
+          <Field
+            label="Founded Year"
+            name="founded"
+            value={form.founded}
+            onChange={handleChange}
+            placeholder="e.g. 2018"
+          />
+          <Field
+            label="Team Size"
+            name="teamSize"
+            value={form.teamSize}
+            onChange={handleChange}
+            placeholder="e.g. 12–50 employees"
+          />
           <div className="md:col-span-2">
-            <TextAreaField label="Description" name="description" value={form.description} onChange={handleChange} placeholder="Brief description of your organization..." />
+            <TextAreaField
+              label="Description"
+              name="description"
+              value={form.description}
+              onChange={handleChange}
+              placeholder="Brief description of your organization..."
+            />
           </div>
         </div>
       </div>
@@ -263,10 +318,30 @@ export default function AccountContent() {
           <h2 className="text-sm font-semibold text-[var(--foreground)]">Contact Details</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-          <Field label="Email Address" name="email" value={form.email} onChange={handleChange} placeholder="contact@yourorg.com" type="email" />
-          <Field label="Phone Number" name="phone" value={form.phone} onChange={handleChange} placeholder="+91 98765 43210" />
+          <Field
+            label="Email Address"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="contact@yourorg.com"
+            type="email"
+          />
+          <Field
+            label="Phone Number"
+            name="phone"
+            value={form.phone}
+            onChange={handleChange}
+            placeholder="+91 98765 43210"
+          />
           <div className="md:col-span-2">
-            <Field label="Website" name="website" value={form.website} onChange={handleChange} placeholder="https://yourorg.com" type="url" />
+            <Field
+              label="Website"
+              name="website"
+              value={form.website}
+              onChange={handleChange}
+              placeholder="https://yourorg.com"
+              type="url"
+            />
           </div>
         </div>
       </div>
@@ -279,12 +354,42 @@ export default function AccountContent() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
           <div className="md:col-span-2">
-            <Field label="Street Address" name="street" value={form.street} onChange={handleChange} placeholder="Street, Building, Floor" />
+            <Field
+              label="Street Address"
+              name="street"
+              value={form.street}
+              onChange={handleChange}
+              placeholder="Street, Building, Floor"
+            />
           </div>
-          <Field label="City" name="city" value={form.city} onChange={handleChange} placeholder="City" />
-          <Field label="State / Province" name="state" value={form.state} onChange={handleChange} placeholder="State" />
-          <Field label="ZIP / Postal Code" name="zip" value={form.zip} onChange={handleChange} placeholder="ZIP Code" />
-          <Field label="Country" name="country" value={form.country} onChange={handleChange} placeholder="Country" />
+          <Field
+            label="City"
+            name="city"
+            value={form.city}
+            onChange={handleChange}
+            placeholder="City"
+          />
+          <Field
+            label="State / Province"
+            name="state"
+            value={form.state}
+            onChange={handleChange}
+            placeholder="State"
+          />
+          <Field
+            label="ZIP / Postal Code"
+            name="zip"
+            value={form.zip}
+            onChange={handleChange}
+            placeholder="ZIP Code"
+          />
+          <Field
+            label="Country"
+            name="country"
+            value={form.country}
+            onChange={handleChange}
+            placeholder="Country"
+          />
         </div>
       </div>
 
@@ -295,8 +400,20 @@ export default function AccountContent() {
           <h2 className="text-sm font-semibold text-[var(--foreground)]">Business Info</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-          <Field label="Registration Number" name="registrationNumber" value={form.registrationNumber} onChange={handleChange} placeholder="e.g. REG-2018-HE-04421" />
-          <Field label="Tax ID / GSTIN" name="taxId" value={form.taxId} onChange={handleChange} placeholder="e.g. GSTIN: 27AABCH1234F1Z5" />
+          <Field
+            label="Registration Number"
+            name="registrationNumber"
+            value={form.registrationNumber}
+            onChange={handleChange}
+            placeholder="e.g. REG-2018-HE-04421"
+          />
+          <Field
+            label="Tax ID / GSTIN"
+            name="taxId"
+            value={form.taxId}
+            onChange={handleChange}
+            placeholder="e.g. GSTIN: 27AABCH1234F1Z5"
+          />
         </div>
       </div>
 

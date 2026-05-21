@@ -9,7 +9,11 @@ interface RFQStatusTimelineProps {
   date: string;
 }
 
-export default function RFQStatusTimeline({ status, assignedSupplier, date }: RFQStatusTimelineProps) {
+export default function RFQStatusTimeline({
+  status,
+  assignedSupplier,
+  date,
+}: RFQStatusTimelineProps) {
   const steps = [
     {
       id: 'submitted',
@@ -22,7 +26,9 @@ export default function RFQStatusTimeline({ status, assignedSupplier, date }: RF
     {
       id: 'matching',
       label: 'Supplier Matching',
-      description: assignedSupplier ? `Assigned to ${assignedSupplier}` : 'Matching with top manufacturers',
+      description: assignedSupplier
+        ? `Assigned to ${assignedSupplier}`
+        : 'Matching with top manufacturers',
       icon: User,
       completed: ['assigned', 'quoted', 'accepted'].includes(status),
       active: status === 'assigned',
@@ -30,7 +36,12 @@ export default function RFQStatusTimeline({ status, assignedSupplier, date }: RF
     {
       id: 'quoted',
       label: 'Quotation Ready',
-      description: status === 'quoted' ? 'Review quotes and proceed' : status === 'accepted' ? 'Quote accepted' : 'Awaiting quote from supplier',
+      description:
+        status === 'quoted'
+          ? 'Review quotes and proceed'
+          : status === 'accepted'
+            ? 'Quote accepted'
+            : 'Awaiting quote from supplier',
       icon: Clock,
       completed: ['quoted', 'accepted'].includes(status),
       active: status === 'quoted',
@@ -38,7 +49,8 @@ export default function RFQStatusTimeline({ status, assignedSupplier, date }: RF
     {
       id: 'converted',
       label: 'Order Initiated',
-      description: status === 'accepted' ? 'Order successfully generated' : 'Purchase agreement pending',
+      description:
+        status === 'accepted' ? 'Order successfully generated' : 'Purchase agreement pending',
       icon: ShoppingBag,
       completed: status === 'accepted',
       active: status === 'accepted',
@@ -66,20 +78,18 @@ export default function RFQStatusTimeline({ status, assignedSupplier, date }: RF
                       step.completed
                         ? 'bg-emerald-500 text-white'
                         : step.active
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-400'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-400'
                     }`}
                   >
-                    {step.completed ? (
-                      <Check size={16} />
-                    ) : (
-                      <step.icon size={16} />
-                    )}
+                    {step.completed ? <Check size={16} /> : <step.icon size={16} />}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0 pt-1.5 flex justify-between space-x-4">
                   <div>
-                    <p className={`text-xs font-semibold ${step.active ? 'text-blue-600' : step.completed ? 'text-gray-800' : 'text-gray-500'}`}>
+                    <p
+                      className={`text-xs font-semibold ${step.active ? 'text-blue-600' : step.completed ? 'text-gray-800' : 'text-gray-500'}`}
+                    >
                       {step.label}
                     </p>
                     <p className="text-[11px] text-gray-500 mt-0.5">{step.description}</p>

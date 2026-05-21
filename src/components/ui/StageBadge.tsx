@@ -17,7 +17,9 @@ const stageConfig: Record<Stage, { bg: string; text: string; dot: string; label:
 export default function StageBadge({ stage }: StageBadgeProps) {
   const cfg = stageConfig[stage as Stage] ?? stageConfig['Draft'];
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}
+    >
       <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
       {cfg.label}
     </span>

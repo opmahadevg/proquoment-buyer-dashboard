@@ -81,7 +81,9 @@ export default function QuotesTab({ steps }: QuotesTabProps) {
                   )}
                 </div>
                 <div className={`pb-6 flex-1 ${idx === steps?.length - 1 ? 'pb-0' : ''}`}>
-                  <p className={`text-sm font-semibold mb-0.5 ${isActive ? 'text-[var(--foreground)]' : 'text-gray-400'}`}>
+                  <p
+                    className={`text-sm font-semibold mb-0.5 ${isActive ? 'text-[var(--foreground)]' : 'text-gray-400'}`}
+                  >
                     {step?.highlight ? (
                       <>
                         {step?.id === 1 ? 'Identified ' : 'Reaching out to '}
@@ -96,7 +98,9 @@ export default function QuotesTab({ steps }: QuotesTabProps) {
                       </>
                     )}
                   </p>
-                  <p className={`text-sm ${isActive ? 'text-[var(--muted-foreground)]' : 'text-gray-300'}`}>
+                  <p
+                    className={`text-sm ${isActive ? 'text-[var(--muted-foreground)]' : 'text-gray-300'}`}
+                  >
                     {step?.description}
                   </p>
                 </div>

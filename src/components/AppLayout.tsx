@@ -79,15 +79,28 @@ export default function AppLayout({ children }: AppLayoutProps) {
       {/* Main Content */}
       <div
         className="flex flex-col flex-1 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-        style={{ marginLeft: typeof window !== 'undefined' && window.innerWidth >= 768 ? (sidebarOpen ? '240px' : '64px') : 0 }}
+        style={{
+          marginLeft:
+            typeof window !== 'undefined' && window.innerWidth >= 768
+              ? sidebarOpen
+                ? '240px'
+                : '64px'
+              : 0,
+        }}
       >
         {/* Mobile Top Header */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-[var(--border)] sticky top-0 z-30">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
-              <img src="/proquoment-logo.png" alt="Proquoment" className="w-full h-full object-cover" />
+              <img
+                src="/proquoment-logo.png"
+                alt="Proquoment"
+                className="w-full h-full object-cover"
+              />
             </div>
-            <span className="font-bold text-sm text-[var(--foreground)] tracking-tight">Proquoment</span>
+            <span className="font-bold text-sm text-[var(--foreground)] tracking-tight">
+              Proquoment
+            </span>
           </div>
           <button
             onClick={() => setMobileSidebarOpen(true)}
@@ -100,9 +113,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <AnnouncementBanner message="Labor Day Notice: Asia production pauses May 1–6. Expect slower responses in this period." />
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
-          <PageTransition>
-            {children}
-          </PageTransition>
+          <PageTransition>{children}</PageTransition>
         </main>
 
         {/* Mobile Bottom Nav */}
@@ -121,9 +132,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 );
               }
               return (
-                <Link key={href} href={href} className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg">
-                  <Icon size={20} className={active ? 'text-primary' : 'text-[var(--muted-foreground)]'} />
-                  <span className={`text-[10px] font-medium ${active ? 'text-primary' : 'text-[var(--muted-foreground)]'}`}>
+                <Link
+                  key={href}
+                  href={href}
+                  className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg"
+                >
+                  <Icon
+                    size={20}
+                    className={active ? 'text-primary' : 'text-[var(--muted-foreground)]'}
+                  />
+                  <span
+                    className={`text-[10px] font-medium ${active ? 'text-primary' : 'text-[var(--muted-foreground)]'}`}
+                  >
                     {label}
                   </span>
                 </Link>

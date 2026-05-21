@@ -117,7 +117,9 @@ export default function ProductsListContent() {
             >
               {tab.label}
               {tab.count > 0 && (
-                <span className={`ml-1.5 text-xs ${activeTab === tab.id ? 'text-primary' : 'text-[var(--muted-foreground)]'}`}>
+                <span
+                  className={`ml-1.5 text-xs ${activeTab === tab.id ? 'text-primary' : 'text-[var(--muted-foreground)]'}`}
+                >
                   {tab.count}
                 </span>
               )}
@@ -142,8 +144,13 @@ export default function ProductsListContent() {
 
               {sourcingProducts.length === 0 && (
                 <div className="bg-white rounded-xl border border-[var(--border)] px-5 py-12 text-center">
-                  <p className="text-sm text-[var(--muted-foreground)] mb-3">No sourcing products yet.</p>
-                  <Link href="/new-product" className="text-sm text-primary font-medium hover:underline">
+                  <p className="text-sm text-[var(--muted-foreground)] mb-3">
+                    No sourcing products yet.
+                  </p>
+                  <Link
+                    href="/new-product"
+                    className="text-sm text-primary font-medium hover:underline"
+                  >
                     Create your first RFQ →
                   </Link>
                 </div>
@@ -154,10 +161,18 @@ export default function ProductsListContent() {
                 <>
                   <div className="hidden md:block bg-white rounded-xl border border-[var(--border)] overflow-hidden">
                     <div className="grid grid-cols-[1fr_180px_160px_140px] px-5 py-3 border-b border-[var(--border)] bg-[var(--muted)]/40">
-                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Name</span>
-                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Status</span>
-                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Stage</span>
-                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Updated</span>
+                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+                        Name
+                      </span>
+                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+                        Status
+                      </span>
+                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+                        Stage
+                      </span>
+                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+                        Updated
+                      </span>
                     </div>
                     {sourcingProducts.map((product, i) => (
                       <Link
@@ -169,9 +184,17 @@ export default function ProductsListContent() {
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-[var(--muted)] flex items-center justify-center transition-transform duration-150 group-hover:scale-105">
                             {product.image ? (
-                              <AppImage src={product.image} alt={product.imageAlt} width={40} height={40} className="w-full h-full object-cover" />
+                              <AppImage
+                                src={product.image}
+                                alt={product.imageAlt}
+                                width={40}
+                                height={40}
+                                className="w-full h-full object-cover"
+                              />
                             ) : (
-                              <span className="text-lg font-bold text-primary">{product.name.charAt(0).toUpperCase()}</span>
+                              <span className="text-lg font-bold text-primary">
+                                {product.name.charAt(0).toUpperCase()}
+                              </span>
                             )}
                           </div>
                           <div className="min-w-0">
@@ -180,19 +203,28 @@ export default function ProductsListContent() {
                                 {product.name}
                               </span>
                               {!product.isStatic && (
-                                <span className="flex-shrink-0 text-[10px] font-semibold text-primary bg-[var(--secondary)] px-2 py-0.5 rounded-full">AI RFQ</span>
+                                <span className="flex-shrink-0 text-[10px] font-semibold text-primary bg-[var(--secondary)] px-2 py-0.5 rounded-full">
+                                  AI RFQ
+                                </span>
                               )}
                             </div>
                             {(product.category || product.moq) && (
                               <span className="text-xs text-[var(--muted-foreground)]">
-                                {product.category}{product.moq ? ` · MOQ: ${product.moq}` : ''}
+                                {product.category}
+                                {product.moq ? ` · MOQ: ${product.moq}` : ''}
                               </span>
                             )}
                           </div>
                         </div>
-                        <div><StatusBadge status={product.status} /></div>
-                        <div><StageBadge stage={product.stage} /></div>
-                        <span className="text-sm text-[var(--muted-foreground)]">{product.updated}</span>
+                        <div>
+                          <StatusBadge status={product.status} />
+                        </div>
+                        <div>
+                          <StageBadge stage={product.stage} />
+                        </div>
+                        <span className="text-sm text-[var(--muted-foreground)]">
+                          {product.updated}
+                        </span>
                       </Link>
                     ))}
                   </div>
@@ -208,23 +240,37 @@ export default function ProductsListContent() {
                       >
                         <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-[var(--muted)] flex items-center justify-center">
                           {product.image ? (
-                            <AppImage src={product.image} alt={product.imageAlt} width={48} height={48} className="w-full h-full object-cover" />
+                            <AppImage
+                              src={product.image}
+                              alt={product.imageAlt}
+                              width={48}
+                              height={48}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <span className="text-xl font-bold text-primary">{product.name.charAt(0).toUpperCase()}</span>
+                            <span className="text-xl font-bold text-primary">
+                              {product.name.charAt(0).toUpperCase()}
+                            </span>
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-sm font-semibold text-[var(--foreground)] truncate">{product.name}</span>
+                            <span className="text-sm font-semibold text-[var(--foreground)] truncate">
+                              {product.name}
+                            </span>
                             {!product.isStatic && (
-                              <span className="flex-shrink-0 text-[10px] font-semibold text-primary bg-[var(--secondary)] px-1.5 py-0.5 rounded-full">AI</span>
+                              <span className="flex-shrink-0 text-[10px] font-semibold text-primary bg-[var(--secondary)] px-1.5 py-0.5 rounded-full">
+                                AI
+                              </span>
                             )}
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <StatusBadge status={product.status} />
                             <StageBadge stage={product.stage} />
                           </div>
-                          <p className="text-xs text-[var(--muted-foreground)] mt-1">{product.updated}</p>
+                          <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                            {product.updated}
+                          </p>
                         </div>
                         <span className="text-[var(--muted-foreground)]">›</span>
                       </Link>
@@ -252,9 +298,15 @@ export default function ProductsListContent() {
                   {/* Desktop table */}
                   <div className="hidden md:block bg-white rounded-xl border border-[var(--border)] overflow-hidden">
                     <div className="grid grid-cols-[1fr_200px_160px] px-5 py-3 border-b border-[var(--border)] bg-[var(--muted)]/40">
-                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Name</span>
-                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Stage</span>
-                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Created</span>
+                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+                        Name
+                      </span>
+                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+                        Stage
+                      </span>
+                      <span className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+                        Created
+                      </span>
                     </div>
                     {draftProducts.map((product, i) => (
                       <Link
@@ -266,17 +318,29 @@ export default function ProductsListContent() {
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-[var(--muted)] transition-transform duration-150 group-hover:scale-105">
                             {product.image ? (
-                              <AppImage src={product.image} alt={product.imageAlt} width={40} height={40} className="w-full h-full object-cover" />
+                              <AppImage
+                                src={product.image}
+                                alt={product.imageAlt}
+                                width={40}
+                                height={40}
+                                className="w-full h-full object-cover"
+                              />
                             ) : (
-                              <span className="text-lg font-bold text-primary flex items-center justify-center h-full">{product.name.charAt(0).toUpperCase()}</span>
+                              <span className="text-lg font-bold text-primary flex items-center justify-center h-full">
+                                {product.name.charAt(0).toUpperCase()}
+                              </span>
                             )}
                           </div>
                           <span className="text-sm font-medium text-[var(--foreground)] truncate group-hover:text-primary transition-colors duration-150">
                             {product.name}
                           </span>
                         </div>
-                        <div><StageBadge stage={product.stage} /></div>
-                        <span className="text-sm text-[var(--muted-foreground)]">{product.updated}</span>
+                        <div>
+                          <StageBadge stage={product.stage} />
+                        </div>
+                        <span className="text-sm text-[var(--muted-foreground)]">
+                          {product.updated}
+                        </span>
                       </Link>
                     ))}
                   </div>
@@ -291,15 +355,27 @@ export default function ProductsListContent() {
                       >
                         <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-[var(--muted)] flex items-center justify-center">
                           {product.image ? (
-                            <AppImage src={product.image} alt={product.imageAlt} width={48} height={48} className="w-full h-full object-cover" />
+                            <AppImage
+                              src={product.image}
+                              alt={product.imageAlt}
+                              width={48}
+                              height={48}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <span className="text-xl font-bold text-primary">{product.name.charAt(0).toUpperCase()}</span>
+                            <span className="text-xl font-bold text-primary">
+                              {product.name.charAt(0).toUpperCase()}
+                            </span>
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className="text-sm font-semibold text-[var(--foreground)] truncate block mb-1">{product.name}</span>
+                          <span className="text-sm font-semibold text-[var(--foreground)] truncate block mb-1">
+                            {product.name}
+                          </span>
                           <StageBadge stage={product.stage} />
-                          <p className="text-xs text-[var(--muted-foreground)] mt-1">{product.updated}</p>
+                          <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                            {product.updated}
+                          </p>
                         </div>
                         <span className="text-[var(--muted-foreground)]">›</span>
                       </Link>

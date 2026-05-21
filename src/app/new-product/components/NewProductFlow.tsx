@@ -9,7 +9,22 @@ import { useChat } from '@/lib/hooks/useChat';
 import { getChatCompletion } from '@/lib/ai/chatCompletion';
 import ChatButton from '@/components/ui/ChatButton';
 import { Globe } from '@/components/ui/cobe-globe';
-import { ArrowRight, Eye, EyeOff, ArrowUp, Loader2, CheckCircle, ChevronRight, Paperclip, UploadCloud, X, FileText, CheckCircle2, Circle, CircleDotDashed } from 'lucide-react';
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  ArrowUp,
+  Loader2,
+  CheckCircle,
+  ChevronRight,
+  Paperclip,
+  UploadCloud,
+  X,
+  FileText,
+  CheckCircle2,
+  Circle,
+  CircleDotDashed,
+} from 'lucide-react';
 import { saveProduct } from '@/lib/productStore';
 import { submitRFQ } from '@/lib/services/procurementApi';
 
@@ -163,13 +178,24 @@ const EMPTY_RFQ: RFQData = {
 function extractOptionsFromText(text: string): { cleanText: string; options: string[] } {
   const optionsMatch = text.match(/OPTIONS:\s*(.+)$/m);
   if (!optionsMatch) return { cleanText: text.trim(), options: [] };
-  const options = optionsMatch[1].split(',').map((o) => o.trim()).filter(Boolean);
+  const options = optionsMatch[1]
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
   const cleanText = text.replace(/OPTIONS:\s*.+$/m, '').trim();
   return { cleanText, options };
 }
 
 // ─── Decorative crescent dot-pattern SVG ─────────────────────────────────────
-function CrescentDots({ size = 220, rotate = 0, opacity = 1 }: { size?: number; rotate?: number; opacity?: number }) {
+function CrescentDots({
+  size = 220,
+  rotate = 0,
+  opacity = 1,
+}: {
+  size?: number;
+  rotate?: number;
+  opacity?: number;
+}) {
   const dots: React.ReactNode[] = [];
   const cx = size / 2;
   const cy = size / 2;
@@ -188,13 +214,20 @@ function CrescentDots({ size = 220, rotate = 0, opacity = 1 }: { size?: number; 
       const dy2 = y - cy;
       const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
       if (dist <= outerR && dist2 > innerR * 0.9) {
-        dots.push(<circle key={`${x}-${y}`} cx={x} cy={y} r={dotR} fill="#3B35E8" opacity={0.55} />);
+        dots.push(
+          <circle key={`${x}-${y}`} cx={x} cy={y} r={dotR} fill="#3B35E8" opacity={0.55} />
+        );
       }
     }
   }
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: `rotate(${rotate}deg)`, opacity }}>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      style={{ transform: `rotate(${rotate}deg)`, opacity }}
+    >
       {dots}
     </svg>
   );
@@ -203,27 +236,68 @@ function CrescentDots({ size = 220, rotate = 0, opacity = 1 }: { size?: number; 
 // ─── World map dot pattern ────────────────────────────────────────────────────
 function WorldMapDots() {
   const mapData = [
-    ...Array.from({ length: 40 }, (_, i) => ({ x: 120 + (i % 8) * 18, y: 80 + Math.floor(i / 8) * 18 })),
-    ...Array.from({ length: 30 }, (_, i) => ({ x: 130 + (i % 6) * 18, y: 170 + Math.floor(i / 6) * 18 })),
-    ...Array.from({ length: 20 }, (_, i) => ({ x: 200 + (i % 4) * 18, y: 280 + Math.floor(i / 4) * 18 })),
-    ...Array.from({ length: 25 }, (_, i) => ({ x: 440 + (i % 5) * 18, y: 80 + Math.floor(i / 5) * 18 })),
-    ...Array.from({ length: 30 }, (_, i) => ({ x: 450 + (i % 5) * 18, y: 200 + Math.floor(i / 5) * 18 })),
-    ...Array.from({ length: 60 }, (_, i) => ({ x: 560 + (i % 10) * 18, y: 80 + Math.floor(i / 10) * 18 })),
-    ...Array.from({ length: 40 }, (_, i) => ({ x: 580 + (i % 8) * 18, y: 200 + Math.floor(i / 8) * 18 })),
-    ...Array.from({ length: 15 }, (_, i) => ({ x: 700 + (i % 5) * 18, y: 320 + Math.floor(i / 5) * 18 })),
+    ...Array.from({ length: 40 }, (_, i) => ({
+      x: 120 + (i % 8) * 18,
+      y: 80 + Math.floor(i / 8) * 18,
+    })),
+    ...Array.from({ length: 30 }, (_, i) => ({
+      x: 130 + (i % 6) * 18,
+      y: 170 + Math.floor(i / 6) * 18,
+    })),
+    ...Array.from({ length: 20 }, (_, i) => ({
+      x: 200 + (i % 4) * 18,
+      y: 280 + Math.floor(i / 4) * 18,
+    })),
+    ...Array.from({ length: 25 }, (_, i) => ({
+      x: 440 + (i % 5) * 18,
+      y: 80 + Math.floor(i / 5) * 18,
+    })),
+    ...Array.from({ length: 30 }, (_, i) => ({
+      x: 450 + (i % 5) * 18,
+      y: 200 + Math.floor(i / 5) * 18,
+    })),
+    ...Array.from({ length: 60 }, (_, i) => ({
+      x: 560 + (i % 10) * 18,
+      y: 80 + Math.floor(i / 10) * 18,
+    })),
+    ...Array.from({ length: 40 }, (_, i) => ({
+      x: 580 + (i % 8) * 18,
+      y: 200 + Math.floor(i / 8) * 18,
+    })),
+    ...Array.from({ length: 15 }, (_, i) => ({
+      x: 700 + (i % 5) * 18,
+      y: 320 + Math.floor(i / 5) * 18,
+    })),
   ];
   const supplierDots = [
-    { x: 720, y: 180 }, { x: 740, y: 200 }, { x: 760, y: 190 }, { x: 780, y: 210 },
-    { x: 800, y: 185 }, { x: 820, y: 200 }, { x: 840, y: 175 }, { x: 860, y: 195 },
-    { x: 750, y: 220 }, { x: 770, y: 230 }, { x: 790, y: 215 }, { x: 810, y: 225 },
-    { x: 300, y: 200 }, { x: 320, y: 210 }, { x: 340, y: 195 },
-    { x: 460, y: 120 }, { x: 480, y: 130 }, { x: 500, y: 115 },
+    { x: 720, y: 180 },
+    { x: 740, y: 200 },
+    { x: 760, y: 190 },
+    { x: 780, y: 210 },
+    { x: 800, y: 185 },
+    { x: 820, y: 200 },
+    { x: 840, y: 175 },
+    { x: 860, y: 195 },
+    { x: 750, y: 220 },
+    { x: 770, y: 230 },
+    { x: 790, y: 215 },
+    { x: 810, y: 225 },
+    { x: 300, y: 200 },
+    { x: 320, y: 210 },
+    { x: 340, y: 195 },
+    { x: 460, y: 120 },
+    { x: 480, y: 130 },
+    { x: 500, y: 115 },
   ];
 
   return (
     <svg viewBox="0 0 1200 500" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
-      {mapData.map((d, i) => <circle key={`land-${i}`} cx={d.x} cy={d.y} r={3} fill="#e5e7f0" />)}
-      {supplierDots.map((d, i) => <circle key={`sup-${i}`} cx={d.x} cy={d.y} r={4} fill="#3B35E8" />)}
+      {mapData.map((d, i) => (
+        <circle key={`land-${i}`} cx={d.x} cy={d.y} r={3} fill="#e5e7f0" />
+      ))}
+      {supplierDots.map((d, i) => (
+        <circle key={`sup-${i}`} cx={d.x} cy={d.y} r={4} fill="#3B35E8" />
+      ))}
     </svg>
   );
 }
@@ -242,21 +316,21 @@ const CATEGORY_CHIPS = [
 
 // ─── Globe supplier markers (major manufacturing hubs) ────────────────────────
 const SUPPLIER_MARKERS = [
-  { id: 'shenzhen',  location: [22.5,  114.1]  as [number, number] },
-  { id: 'shanghai',  location: [31.2,  121.5]  as [number, number] },
-  { id: 'guangzhou', location: [23.1,  113.3]  as [number, number] },
-  { id: 'vietnam',   location: [10.8,  106.7]  as [number, number] },
-  { id: 'mumbai',    location: [19.1,   72.9]  as [number, number] },
-  { id: 'dhaka',     location: [23.8,   90.4]  as [number, number] },
-  { id: 'istanbul',  location: [41.0,   28.9]  as [number, number] },
-  { id: 'hamburg',   location: [53.6,   10.0]  as [number, number] },
-  { id: 'london',    location: [51.5,   -0.1]  as [number, number] },
-  { id: 'mexico',    location: [25.7, -100.3]  as [number, number] },
-  { id: 'losangeles',location: [34.0, -118.2]  as [number, number] },
-  { id: 'saopaulo',  location: [-23.5,  -46.6] as [number, number] },
-  { id: 'seoul',     location: [37.6,  126.9]  as [number, number] },
-  { id: 'taipei',    location: [25.0,  121.5]  as [number, number] },
-  { id: 'jakarta',   location: [ -6.2,  106.8] as [number, number] },
+  { id: 'shenzhen', location: [22.5, 114.1] as [number, number] },
+  { id: 'shanghai', location: [31.2, 121.5] as [number, number] },
+  { id: 'guangzhou', location: [23.1, 113.3] as [number, number] },
+  { id: 'vietnam', location: [10.8, 106.7] as [number, number] },
+  { id: 'mumbai', location: [19.1, 72.9] as [number, number] },
+  { id: 'dhaka', location: [23.8, 90.4] as [number, number] },
+  { id: 'istanbul', location: [41.0, 28.9] as [number, number] },
+  { id: 'hamburg', location: [53.6, 10.0] as [number, number] },
+  { id: 'london', location: [51.5, -0.1] as [number, number] },
+  { id: 'mexico', location: [25.7, -100.3] as [number, number] },
+  { id: 'losangeles', location: [34.0, -118.2] as [number, number] },
+  { id: 'saopaulo', location: [-23.5, -46.6] as [number, number] },
+  { id: 'seoul', location: [37.6, 126.9] as [number, number] },
+  { id: 'taipei', location: [25.0, 121.5] as [number, number] },
+  { id: 'jakarta', location: [-6.2, 106.8] as [number, number] },
 ];
 
 // ─── Step 1: Intro ────────────────────────────────────────────────────────────
@@ -267,7 +341,10 @@ function IntroStep({ onNext }: { onNext: (product: string) => void }) {
     <div className="relative min-h-screen bg-white overflow-hidden flex flex-col md:flex-row">
       {/* Back link */}
       <div className="absolute top-4 left-4 md:top-6 md:left-8 z-10">
-        <Link href="/products-list" className="flex items-center gap-1.5 text-sm text-[var(--foreground)] hover:text-primary transition-colors">
+        <Link
+          href="/products-list"
+          className="flex items-center gap-1.5 text-sm text-[var(--foreground)] hover:text-primary transition-colors"
+        >
           <span className="text-base">‹</span> Back
         </Link>
       </div>
@@ -277,14 +354,16 @@ function IntroStep({ onNext }: { onNext: (product: string) => void }) {
         <h1 className="text-2xl md:text-4xl font-bold text-[var(--foreground)] mb-2 md:mb-3 leading-tight">
           What product are we sourcing today?
         </h1>
-        <p className="text-sm text-[var(--muted-foreground)] mb-4 md:mb-6">Pick a category or describe your product below.</p>
+        <p className="text-sm text-[var(--muted-foreground)] mb-4 md:mb-6">
+          Pick a category or describe your product below.
+        </p>
 
         {/* Category chips */}
         <div className="flex flex-wrap gap-2 mb-4 md:mb-5">
           {CATEGORY_CHIPS.map((chip) => (
             <button
               key={chip.value}
-              onClick={() => setValue((prev) => prev ? prev : chip.value)}
+              onClick={() => setValue((prev) => (prev ? prev : chip.value))}
               className="px-3 md:px-3.5 py-1.5 md:py-2 text-xs md:text-sm border border-[var(--border)] rounded-full hover:border-primary hover:bg-[var(--secondary)] hover:text-primary transition-all duration-150 text-[var(--foreground)] bg-white"
             >
               {chip.label}
@@ -301,7 +380,8 @@ function IntroStep({ onNext }: { onNext: (product: string) => void }) {
           />
         </div>
         <p className="text-xs text-[var(--muted-foreground)] italic mb-5 md:mb-7">
-          More detail = better manufacturer matches. Don&apos;t worry — the AI will ask follow-up questions.
+          More detail = better manufacturer matches. Don&apos;t worry — the AI will ask follow-up
+          questions.
         </p>
         <button
           onClick={() => value.trim() && onNext(value.trim())}
@@ -347,27 +427,47 @@ const AGENT_TASKS = [
   {
     id: '1',
     title: 'Analysing product description',
-    subtasks: ['Extracting key specifications', 'Identifying material requirements', 'Parsing technical standards'],
+    subtasks: [
+      'Extracting key specifications',
+      'Identifying material requirements',
+      'Parsing technical standards',
+    ],
   },
   {
     id: '2',
     title: 'Scanning global supplier database',
-    subtasks: ['Querying 12,000+ verified manufacturers', 'Filtering by product category', 'Applying geographic preferences'],
+    subtasks: [
+      'Querying 12,000+ verified manufacturers',
+      'Filtering by product category',
+      'Applying geographic preferences',
+    ],
   },
   {
     id: '3',
     title: 'Matching manufacturer capabilities',
-    subtasks: ['Comparing MOQ & pricing bands', 'Evaluating production capacity', 'Checking lead time compatibility'],
+    subtasks: [
+      'Comparing MOQ & pricing bands',
+      'Evaluating production capacity',
+      'Checking lead time compatibility',
+    ],
   },
   {
     id: '4',
     title: 'Verifying compliance & certifications',
-    subtasks: ['Cross-checking required standards', 'Validating audit records', 'Reviewing quality certifications'],
+    subtasks: [
+      'Cross-checking required standards',
+      'Validating audit records',
+      'Reviewing quality certifications',
+    ],
   },
   {
     id: '5',
     title: 'Preparing your shortlist',
-    subtasks: ['Ranking by relevance score', 'Finalising top manufacturer matches', 'Ready to review'],
+    subtasks: [
+      'Ranking by relevance score',
+      'Finalising top manufacturer matches',
+      'Ready to review',
+    ],
   },
 ];
 
@@ -401,7 +501,11 @@ function StatusIcon({ status, size = 16 }: { status: TaskStatus; size?: number }
 function TransitionStep({ productText, onNext }: { productText: string; onNext: () => void }) {
   const productName = deriveProductName(productText);
   const [statuses, setStatuses] = useState<Record<string, TaskStatus>>({
-    '1': 'in-progress', '2': 'pending', '3': 'pending', '4': 'pending', '5': 'pending',
+    '1': 'in-progress',
+    '2': 'pending',
+    '3': 'pending',
+    '4': 'pending',
+    '5': 'pending',
   });
   const [activeTask, setActiveTask] = useState('1');
 
@@ -409,7 +513,11 @@ function TransitionStep({ productText, onNext }: { productText: string; onNext: 
     // Task sequence — each task takes ~900ms
     const advance = (id: string, nextId: string | null, delay: number) =>
       setTimeout(() => {
-        setStatuses((p) => ({ ...p, [id]: 'completed', ...(nextId ? { [nextId]: 'in-progress' } : {}) }));
+        setStatuses((p) => ({
+          ...p,
+          [id]: 'completed',
+          ...(nextId ? { [nextId]: 'in-progress' } : {}),
+        }));
         if (nextId) setActiveTask(nextId);
       }, delay);
 
@@ -420,13 +528,18 @@ function TransitionStep({ productText, onNext }: { productText: string; onNext: 
     const t5 = advance('5', null, 4300);
     const t6 = setTimeout(onNext, 4700);
 
-    return () => { [t1, t2, t3, t4, t5, t6].forEach(clearTimeout); };
+    return () => {
+      [t1, t2, t3, t4, t5, t6].forEach(clearTimeout);
+    };
   }, [onNext]);
 
   return (
     <div className="relative min-h-screen bg-white flex flex-col md:flex-row overflow-hidden">
       <div className="absolute top-4 left-4 md:top-6 md:left-8 z-10">
-        <Link href="/products-list" className="flex items-center gap-1.5 text-sm text-[var(--foreground)] hover:text-primary transition-colors">
+        <Link
+          href="/products-list"
+          className="flex items-center gap-1.5 text-sm text-[var(--foreground)] hover:text-primary transition-colors"
+        >
           <span className="text-base">‹</span> Back
         </Link>
       </div>
@@ -444,7 +557,9 @@ function TransitionStep({ productText, onNext }: { productText: string; onNext: 
               animate={{ opacity: [1, 0.3, 1] }}
               transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
             />
-            <span className="text-xs font-semibold text-primary uppercase tracking-widest">Proquoment AI Agent</span>
+            <span className="text-xs font-semibold text-primary uppercase tracking-widest">
+              Proquoment AI Agent
+            </span>
           </div>
 
           <h1 className="text-2xl md:text-3xl font-bold text-[var(--foreground)] mb-1 leading-tight">
@@ -454,7 +569,9 @@ function TransitionStep({ productText, onNext }: { productText: string; onNext: 
             {productName}
           </h2>
 
-          <p className="text-xl md:text-2xl font-bold text-[var(--foreground)] mb-1">Suppliers Matched</p>
+          <p className="text-xl md:text-2xl font-bold text-[var(--foreground)] mb-1">
+            Suppliers Matched
+          </p>
           <p className="text-xs text-[var(--muted-foreground)]">from our verified global network</p>
         </motion.div>
       </div>
@@ -474,7 +591,9 @@ function TransitionStep({ productText, onNext }: { productText: string; onNext: 
               animate={{ opacity: [1, 0.3, 1] }}
               transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
             />
-            <span className="text-xs font-medium text-[var(--muted-foreground)]">Agent is working…</span>
+            <span className="text-xs font-medium text-[var(--muted-foreground)]">
+              Agent is working…
+            </span>
           </div>
 
           {/* Task list */}
@@ -491,14 +610,22 @@ function TransitionStep({ productText, onNext }: { productText: string; onNext: 
                     <div className="absolute left-[15px] top-[26px] bottom-0 w-px border-l border-dashed border-gray-200" />
                   )}
 
-                  <div className={`flex items-start gap-3 px-2 py-1.5 rounded-lg transition-colors duration-300 ${isActive ? 'bg-blue-50/60' : ''}`}>
+                  <div
+                    className={`flex items-start gap-3 px-2 py-1.5 rounded-lg transition-colors duration-300 ${isActive ? 'bg-blue-50/60' : ''}`}
+                  >
                     <div className="mt-0.5 flex-shrink-0">
                       <StatusIcon status={status} size={15} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm leading-snug transition-colors duration-300 ${
-                        isDone ? 'text-gray-400 line-through' : isActive ? 'text-[var(--foreground)] font-medium' : 'text-gray-400'
-                      }`}>
+                      <p
+                        className={`text-sm leading-snug transition-colors duration-300 ${
+                          isDone
+                            ? 'text-gray-400 line-through'
+                            : isActive
+                              ? 'text-[var(--foreground)] font-medium'
+                              : 'text-gray-400'
+                        }`}
+                      >
                         {task.title}
                       </p>
 
@@ -569,7 +696,13 @@ const RFQ_OPTIONS = [
       <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
         <rect x="3" y="1" width="13" height="17" rx="2" stroke="#3B35E8" strokeWidth="1.5" />
         <path d="M7 6h6M7 9h6M7 12h4" stroke="#3B35E8" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M14 15l2 2 4-4" stroke="#3B35E8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M14 15l2 2 4-4"
+          stroke="#3B35E8"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
     title: 'I have a complete RFQ',
@@ -605,7 +738,10 @@ function ChooseStep({ onNext }: { onNext: (method: RFQMethod) => void }) {
   return (
     <div className="relative min-h-screen bg-white">
       <div className="absolute top-4 left-4 md:top-6 md:left-8">
-        <Link href="/products-list" className="flex items-center gap-1.5 text-sm text-[var(--foreground)] hover:text-primary transition-colors">
+        <Link
+          href="/products-list"
+          className="flex items-center gap-1.5 text-sm text-[var(--foreground)] hover:text-primary transition-colors"
+        >
           <span className="text-base">‹</span> Back
         </Link>
       </div>
@@ -625,7 +761,10 @@ function ChooseStep({ onNext }: { onNext: (method: RFQMethod) => void }) {
                 <p className="text-sm font-semibold text-[var(--foreground)] mb-0.5">{opt.title}</p>
                 <p className="text-xs text-[var(--muted-foreground)]">{opt.description}</p>
               </div>
-              <ArrowRight size={18} className="text-primary flex-shrink-0 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight
+                size={18}
+                className="text-primary flex-shrink-0 group-hover:translate-x-1 transition-transform"
+              />
             </button>
           ))}
         </div>
@@ -651,7 +790,15 @@ function TypingIndicator() {
 }
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ msg, onOptionClick, isLoading }: { msg: Message; onOptionClick: (opt: string) => void; isLoading: boolean }) {
+function MessageBubble({
+  msg,
+  onOptionClick,
+  isLoading,
+}: {
+  msg: Message;
+  onOptionClick: (opt: string) => void;
+  isLoading: boolean;
+}) {
   const [selected, setSelected] = useState<string | null>(null);
 
   const handleSelect = (opt: string) => {
@@ -676,11 +823,13 @@ function MessageBubble({ msg, onOptionClick, isLoading }: { msg: Message; onOpti
       {msg.isStreaming && !msg.text ? (
         <TypingIndicator />
       ) : (
-        <div className="text-[15px] text-[#0D0D14] leading-[1.7] prose prose-sm max-w-none
+        <div
+          className="text-[15px] text-[#0D0D14] leading-[1.7] prose prose-sm max-w-none
           prose-p:my-1.5 prose-p:text-[15px] prose-p:text-[#0D0D14]
           prose-strong:font-semibold prose-strong:text-[#0D0D14]
           prose-ul:my-2 prose-ul:space-y-1.5 prose-li:text-[15px] prose-li:text-[#0D0D14] prose-li:my-0
-          [&_li]:list-none [&_ul]:pl-0">
+          [&_li]:list-none [&_ul]:pl-0"
+        >
           <ReactMarkdown>{msg.text}</ReactMarkdown>
         </div>
       )}
@@ -696,11 +845,12 @@ function MessageBubble({ msg, onOptionClick, isLoading }: { msg: Message; onOpti
                 onClick={() => handleSelect(opt)}
                 disabled={isLoading || !!selected}
                 className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 disabled:cursor-not-allowed
-                  ${isSelected
-                    ? 'bg-[#0D0D14] border-[#0D0D14] text-white'
-                    : selected
-                      ? 'border-gray-200 text-gray-300 bg-white'
-                      : 'border-gray-300 text-[#0D0D14] bg-white hover:border-[#0D0D14] hover:bg-[#F5F5F8]'
+                  ${
+                    isSelected
+                      ? 'bg-[#0D0D14] border-[#0D0D14] text-white'
+                      : selected
+                        ? 'border-gray-200 text-gray-300 bg-white'
+                        : 'border-gray-300 text-[#0D0D14] bg-white hover:border-[#0D0D14] hover:bg-[#F5F5F8]'
                   }`}
               >
                 {isSelected && <CheckCircle size={12} className="inline mr-1.5 -mt-0.5" />}
@@ -715,7 +865,13 @@ function MessageBubble({ msg, onOptionClick, isLoading }: { msg: Message; onOpti
 }
 
 // ─── RFQ Panel ────────────────────────────────────────────────────────────────
-function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
+function RFQPanel({
+  rfq,
+  rfqTitle,
+  finalized,
+  isLoading,
+  onFinalize,
+}: {
   rfq: RFQData;
   rfqTitle: string;
   finalized: boolean;
@@ -728,11 +884,15 @@ function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
   const filledFields =
     allSpecs.filter((s) => !s.pending).length +
     allNotes.filter((n) => !n.pending).length +
-    (rfq.productName ? 1 : 0) + (rfq.category ? 1 : 0) +
-    (rfq.intendedUse ? 1 : 0) + (rfq.description ? 1 : 0) + (rfq.moq ? 1 : 0);
+    (rfq.productName ? 1 : 0) +
+    (rfq.category ? 1 : 0) +
+    (rfq.intendedUse ? 1 : 0) +
+    (rfq.description ? 1 : 0) +
+    (rfq.moq ? 1 : 0);
   const completionPct = Math.round((filledFields / totalFields) * 100);
 
-  const hasBasicInfo = rfq.productName || rfq.category || rfq.intendedUse || rfq.description || rfq.moq;
+  const hasBasicInfo =
+    rfq.productName || rfq.category || rfq.intendedUse || rfq.description || rfq.moq;
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -748,13 +908,14 @@ function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
               style={{ width: `${completionPct}%` }}
             />
           </div>
-          <span className="text-xs font-semibold text-[#0D0D14] tabular-nums">{completionPct}%</span>
+          <span className="text-xs font-semibold text-[#0D0D14] tabular-nums">
+            {completionPct}%
+          </span>
         </div>
       </div>
 
       {/* Panel body */}
       <div className="flex-1 overflow-y-auto px-7 py-6 space-y-7 text-sm">
-
         {/* Basic info */}
         {hasBasicInfo ? (
           <div className="space-y-2">
@@ -772,7 +933,9 @@ function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
 
         {/* Specifications */}
         <div>
-          <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">Specifications:</p>
+          <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
+            Specifications:
+          </p>
           <ul className="space-y-2">
             {allSpecs.map((spec, i) => (
               <li key={i} className="flex items-baseline gap-1.5 text-sm leading-snug">
@@ -780,7 +943,9 @@ function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
                 {spec.pending ? (
                   <span className="text-gray-400 italic">{spec.label}: (Pending)</span>
                 ) : (
-                  <span className="text-[#0D0D14]"><span className="font-semibold">{spec.label}:</span> {spec.value}</span>
+                  <span className="text-[#0D0D14]">
+                    <span className="font-semibold">{spec.label}:</span> {spec.value}
+                  </span>
                 )}
               </li>
             ))}
@@ -789,7 +954,9 @@ function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
 
         {/* Manufacturing Notes */}
         <div>
-          <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">Manufacturing Notes:</p>
+          <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
+            Manufacturing Notes:
+          </p>
           <ul className="space-y-2">
             {allNotes.map((note, i) => (
               <li key={i} className="flex items-baseline gap-1.5 text-sm leading-snug">
@@ -797,7 +964,9 @@ function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
                 {note.pending ? (
                   <span className="text-gray-400 italic">{note.label}: (Pending)</span>
                 ) : (
-                  <span className="text-[#0D0D14]"><span className="font-semibold">{note.label}:</span> {note.value}</span>
+                  <span className="text-[#0D0D14]">
+                    <span className="font-semibold">{note.label}:</span> {note.value}
+                  </span>
                 )}
               </li>
             ))}
@@ -807,7 +976,9 @@ function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
         {/* Ambiguities */}
         {rfq.ambiguities.length > 0 && (
           <div>
-            <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">Ambiguities / Pending Clarifications:</p>
+            <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
+              Ambiguities / Pending Clarifications:
+            </p>
             <ul className="space-y-1.5">
               {rfq.ambiguities.map((item, i) => (
                 <li key={i} className="flex items-baseline gap-1.5 text-sm text-gray-500">
@@ -828,14 +999,16 @@ function RFQPanel({ rfq, rfqTitle, finalized, isLoading, onFinalize }: {
           className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#0D0D14] text-white rounded-xl text-sm font-semibold hover:bg-[#1a1a26] active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {finalized ? (
-            <><CheckCircle size={15} /> RFQ Finalized!</>
+            <>
+              <CheckCircle size={15} /> RFQ Finalized!
+            </>
           ) : (
-            <><ChevronRight size={15} /> Finalize &amp; Add to Products</>
+            <>
+              <ChevronRight size={15} /> Finalize &amp; Add to Products
+            </>
           )}
         </button>
-        <p className="text-xs text-gray-400 text-center mt-2">
-          Adds product to your sourcing list
-        </p>
+        <p className="text-xs text-gray-400 text-center mt-2">Adds product to your sourcing list</p>
       </div>
     </div>
   );
@@ -858,7 +1031,9 @@ function BuilderStep({ productText, productName }: { productText: string; produc
   const [rfqTitle, setRfqTitle] = useState(productName || 'New Product RFQ');
   const [rfq, setRfq] = useState<RFQData>({ ...EMPTY_RFQ });
   const [panelOpen, setPanelOpen] = useState(true);
-  const [conversationHistory, setConversationHistory] = useState<{ role: string; content: string }[]>([]);
+  const [conversationHistory, setConversationHistory] = useState<
+    { role: string; content: string }[]
+  >([]);
   const [initialized, setInitialized] = useState(false);
   const [finalized, setFinalized] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -866,7 +1041,12 @@ function BuilderStep({ productText, productName }: { productText: string; produc
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Streaming hook for conversational text only
-  const { response: streamingResponse, isLoading: isStreaming, error: streamError, sendMessage: sendStreamingMessage } = useChat('AUTO', 'auto', true);
+  const {
+    response: streamingResponse,
+    isLoading: isStreaming,
+    error: streamError,
+    sendMessage: sendStreamingMessage,
+  } = useChat('AUTO', 'auto', true);
 
   // On stream error: remove any stuck empty AI bubbles and show toast so user can retry
   useEffect(() => {
@@ -874,10 +1054,18 @@ function BuilderStep({ productText, productName }: { productText: string; produc
       // Remove the stuck streaming bubble (empty text, isStreaming flag still true)
       setMessages((prev) => prev.filter((m) => !(m.role === 'ai' && m.isStreaming && !m.text)));
       const msg = streamError.message || '';
-      if (msg.includes('503') || msg.toLowerCase().includes('unavailable') || msg.toLowerCase().includes('all ai')) {
-        toast.error('All AI providers are currently unavailable. Please try again shortly.', { duration: 6000 });
+      if (
+        msg.includes('503') ||
+        msg.toLowerCase().includes('unavailable') ||
+        msg.toLowerCase().includes('all ai')
+      ) {
+        toast.error('All AI providers are currently unavailable. Please try again shortly.', {
+          duration: 6000,
+        });
       } else {
-        toast.error('AI connection interrupted — please send your message again.', { duration: 5000 });
+        toast.error('AI connection interrupted — please send your message again.', {
+          duration: 5000,
+        });
       }
     }
   }, [streamError]);
@@ -943,81 +1131,97 @@ function BuilderStep({ productText, productName }: { productText: string; produc
   }, [isStreaming]);
 
   // Second Gemini call: extract structured JSON for RFQ panel (with retry on 429)
-  const fireJsonExtractionCall = useCallback(async (
-    history: { role: string; content: string }[],
-    finalMsg: Message,
-    inlineOptions: string[]
-  ) => {
-    const MAX_RETRIES = 3;
-    const BASE_DELAY_MS = 7000;
+  const fireJsonExtractionCall = useCallback(
+    async (
+      history: { role: string; content: string }[],
+      finalMsg: Message,
+      inlineOptions: string[]
+    ) => {
+      const MAX_RETRIES = 3;
+      const BASE_DELAY_MS = 7000;
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      try {
-        if (attempt > 0) {
-          // Exponential backoff: 7s, 14s, 28s
-          await new Promise((res) => setTimeout(res, BASE_DELAY_MS * Math.pow(2, attempt - 1)));
-        }
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          if (attempt > 0) {
+            // Exponential backoff: 7s, 14s, 28s
+            await new Promise((res) => setTimeout(res, BASE_DELAY_MS * Math.pow(2, attempt - 1)));
+          }
 
-        const jsonMessages = [
-          { role: 'system', content: JSON_SYSTEM_PROMPT },
-          ...trimHistory(history).map((h) => ({ role: h.role, content: h.content })),
-          { role: 'user', content: 'Extract the current RFQ data from the conversation above as JSON.' },
-        ];
+          const jsonMessages = [
+            { role: 'system', content: JSON_SYSTEM_PROMPT },
+            ...trimHistory(history).map((h) => ({ role: h.role, content: h.content })),
+            {
+              role: 'user',
+              content: 'Extract the current RFQ data from the conversation above as JSON.',
+            },
+          ];
 
-        const result = await getChatCompletion('AUTO', 'auto', jsonMessages, {
-          temperature: 0.1,
-          max_tokens: 2048,
-        });
-
-        const rawContent: string = result?.choices?.[0]?.message?.content || '';
-
-        // Parse JSON — strip any accidental markdown fences
-        let jsonStr = rawContent.trim();
-        jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-
-        const parsed = JSON.parse(jsonStr);
-        const { options: jsonOptions, ...rfqUpdate } = parsed;
-
-        // Update RFQ panel
-        setRfq((prev) => {
-          const updated = { ...prev };
-          if (rfqUpdate.productName) { updated.productName = rfqUpdate.productName; setRfqTitle(rfqUpdate.productName); }
-          if (rfqUpdate.category) updated.category = rfqUpdate.category;
-          if (rfqUpdate.intendedUse) updated.intendedUse = rfqUpdate.intendedUse;
-          if (rfqUpdate.description) updated.description = rfqUpdate.description;
-          if (rfqUpdate.moq) updated.moq = rfqUpdate.moq;
-          if (rfqUpdate.specifications?.length) updated.specifications = rfqUpdate.specifications;
-          if (rfqUpdate.manufacturingNotes?.length) updated.manufacturingNotes = rfqUpdate.manufacturingNotes;
-          if (rfqUpdate.ambiguities) updated.ambiguities = rfqUpdate.ambiguities;
-          return updated;
-        });
-
-        // If JSON call returned options and inline didn't have any, update the message
-        const finalOptions = inlineOptions.length > 0 ? inlineOptions : (jsonOptions || []);
-        if (finalOptions.length > 0 && inlineOptions.length === 0) {
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.id === finalMsg.id) {
-              return [...prev.slice(0, -1), { ...last, options: finalOptions }];
-            }
-            return prev;
+          const result = await getChatCompletion('AUTO', 'auto', jsonMessages, {
+            temperature: 0.1,
+            max_tokens: 2048,
           });
-        }
 
-        // Success — exit retry loop
-        return;
-      } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        const isRateLimit = errMsg.includes('429') || errMsg.toLowerCase().includes('rate limit') || errMsg.toLowerCase().includes('quota');
+          const rawContent: string = result?.choices?.[0]?.message?.content || '';
 
-        if (isRateLimit && attempt < MAX_RETRIES - 1) {
-          // Will retry after backoff delay
-          continue;
+          // Parse JSON — strip any accidental markdown fences
+          let jsonStr = rawContent.trim();
+          jsonStr = jsonStr
+            .replace(/^```(?:json)?\s*/i, '')
+            .replace(/\s*```$/i, '')
+            .trim();
+
+          const parsed = JSON.parse(jsonStr);
+          const { options: jsonOptions, ...rfqUpdate } = parsed;
+
+          // Update RFQ panel
+          setRfq((prev) => {
+            const updated = { ...prev };
+            if (rfqUpdate.productName) {
+              updated.productName = rfqUpdate.productName;
+              setRfqTitle(rfqUpdate.productName);
+            }
+            if (rfqUpdate.category) updated.category = rfqUpdate.category;
+            if (rfqUpdate.intendedUse) updated.intendedUse = rfqUpdate.intendedUse;
+            if (rfqUpdate.description) updated.description = rfqUpdate.description;
+            if (rfqUpdate.moq) updated.moq = rfqUpdate.moq;
+            if (rfqUpdate.specifications?.length) updated.specifications = rfqUpdate.specifications;
+            if (rfqUpdate.manufacturingNotes?.length)
+              updated.manufacturingNotes = rfqUpdate.manufacturingNotes;
+            if (rfqUpdate.ambiguities) updated.ambiguities = rfqUpdate.ambiguities;
+            return updated;
+          });
+
+          // If JSON call returned options and inline didn't have any, update the message
+          const finalOptions = inlineOptions.length > 0 ? inlineOptions : jsonOptions || [];
+          if (finalOptions.length > 0 && inlineOptions.length === 0) {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.id === finalMsg.id) {
+                return [...prev.slice(0, -1), { ...last, options: finalOptions }];
+              }
+              return prev;
+            });
+          }
+
+          // Success — exit retry loop
+          return;
+        } catch (err: unknown) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isRateLimit =
+            errMsg.includes('429') ||
+            errMsg.toLowerCase().includes('rate limit') ||
+            errMsg.toLowerCase().includes('quota');
+
+          if (isRateLimit && attempt < MAX_RETRIES - 1) {
+            // Will retry after backoff delay
+            continue;
+          }
+          // Final attempt failed or non-rate-limit error — fail silently (chat still works)
         }
-        // Final attempt failed or non-rate-limit error — fail silently (chat still works)
       }
-    }
-  }, []);
+    },
+    []
+  );
 
   // Initialize conversation
   const initializeConversation = useCallback(() => {
@@ -1065,7 +1269,11 @@ function BuilderStep({ productText, productName }: { productText: string; produc
 
   const handleFinalize = async () => {
     const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const dateStr = now.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
     const title = rfqTitle || rfq.productName || deriveProductName(productText);
 
     saveProduct({
@@ -1088,10 +1296,12 @@ function BuilderStep({ productText, productName }: { productText: string; produc
         product: title,
         qty: rfq.moq || 'TBD',
         value: 'TBD',
-        specs: rfq.specifications.map(s => `${s.label}: ${s.value}`).join(', '),
+        specs: rfq.specifications.map((s) => `${s.label}: ${s.value}`).join(', '),
         buyer: 'Demo User',
+        description: rfq.description || undefined,
+        aiChat: conversationHistory,
       });
-    } catch(err) {
+    } catch (err) {
       console.error('Failed to submit RFQ to Admin', err);
     }
 
@@ -1104,7 +1314,10 @@ function BuilderStep({ productText, productName }: { productText: string; produc
 
   return (
     <div className="relative h-screen bg-white flex flex-col overflow-hidden">
-      <Toaster position="top-right" toastOptions={{ style: { fontSize: '13px', borderRadius: '10px', fontFamily: 'inherit' } }} />
+      <Toaster
+        position="top-right"
+        toastOptions={{ style: { fontSize: '13px', borderRadius: '10px', fontFamily: 'inherit' } }}
+      />
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-gray-100 bg-white z-10 flex-shrink-0">
@@ -1112,7 +1325,8 @@ function BuilderStep({ productText, productName }: { productText: string; produc
           href="/products-list"
           className="flex items-center gap-1 text-sm text-gray-400 hover:text-[#0D0D14] transition-colors whitespace-nowrap"
         >
-          <span className="text-base leading-none">‹</span> <span className="hidden sm:inline">Back</span>
+          <span className="text-base leading-none">‹</span>{' '}
+          <span className="hidden sm:inline">Back</span>
         </Link>
         <div className="flex-1 min-w-0">
           <input
@@ -1133,10 +1347,10 @@ function BuilderStep({ productText, productName }: { productText: string; produc
 
       {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden">
-
         {/* ── Left: Chat (always full width on mobile) ── */}
-        <div className={`flex flex-col transition-all duration-300 ${panelOpen ? 'hidden md:flex md:w-[56%]' : 'w-full'} w-full`}>
-
+        <div
+          className={`flex flex-col transition-all duration-300 ${panelOpen ? 'hidden md:flex md:w-[56%]' : 'w-full'} w-full`}
+        >
           {/* Messages */}
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-2xl mx-auto px-4 md:px-8 pt-5 md:pt-8 pb-4">
@@ -1148,9 +1362,7 @@ function BuilderStep({ productText, productName }: { productText: string; produc
                   isLoading={isDisabled}
                 />
               ))}
-              {isDisabled && messages[messages.length - 1]?.role === 'user' && (
-                <TypingIndicator />
-              )}
+              {isDisabled && messages[messages.length - 1]?.role === 'user' && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
           </div>
@@ -1183,9 +1395,11 @@ function BuilderStep({ productText, productName }: { productText: string; produc
                     disabled={!inputValue.trim() || isDisabled}
                     className="w-7 h-7 rounded-full bg-[#0D0D14] text-white flex items-center justify-center transition-all duration-150 disabled:opacity-25 disabled:cursor-not-allowed hover:bg-[#1a1a26] active:scale-95 flex-shrink-0"
                   >
-                    {isDisabled
-                      ? <Loader2 size={13} className="animate-spin" />
-                      : <ArrowUp size={13} />}
+                    {isDisabled ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <ArrowUp size={13} />
+                    )}
                   </button>
                 </div>
               </div>
@@ -1270,9 +1484,7 @@ function UploadStep({
         {/* Left text */}
         <div className="flex-1 min-w-0 md:pt-2">
           <h1 className="text-2xl md:text-3xl font-bold text-[var(--foreground)] mb-3 leading-tight">
-            {isPartial
-              ? 'Upload what you have'
-              : 'Great! Thanks for preparing your RFQ'}
+            {isPartial ? 'Upload what you have' : 'Great! Thanks for preparing your RFQ'}
           </h1>
           <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
             {isPartial
@@ -1282,7 +1494,8 @@ function UploadStep({
 
           {isPartial && (
             <p className="text-xs text-[var(--muted-foreground)] mt-4 italic">
-              Don't have anything? Click "I don't have anything yet" to skip straight to the AI builder.
+              Don't have anything? Click "I don't have anything yet" to skip straight to the AI
+              builder.
             </p>
           )}
         </div>
@@ -1291,7 +1504,10 @@ function UploadStep({
         <div className="w-full md:w-[420px] md:flex-shrink-0">
           <div
             onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
             className={`flex flex-col items-center justify-center gap-3 h-64 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-150 ${
@@ -1304,8 +1520,12 @@ function UploadStep({
               <UploadCloud size={22} className="text-[var(--muted-foreground)]" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-semibold text-[var(--foreground)]">Choose files to upload</p>
-              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">We support PDF, DOC, DOCX, and images</p>
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                Choose files to upload
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                We support PDF, DOC, DOCX, and images
+              </p>
             </div>
             <input
               ref={inputRef}
@@ -1321,11 +1541,19 @@ function UploadStep({
           {files.length > 0 && (
             <ul className="mt-3 space-y-1.5">
               {files.map((f) => (
-                <li key={f.name} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[var(--muted)]/50 border border-[var(--border)]">
+                <li
+                  key={f.name}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[var(--muted)]/50 border border-[var(--border)]"
+                >
                   <FileText size={14} className="text-primary flex-shrink-0" />
                   <span className="flex-1 text-xs text-[var(--foreground)] truncate">{f.name}</span>
-                  <span className="text-xs text-[var(--muted-foreground)] flex-shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
-                  <button onClick={() => removeFile(f.name)} className="text-[var(--muted-foreground)] hover:text-red-500 transition-colors flex-shrink-0">
+                  <span className="text-xs text-[var(--muted-foreground)] flex-shrink-0">
+                    {(f.size / 1024).toFixed(0)} KB
+                  </span>
+                  <button
+                    onClick={() => removeFile(f.name)}
+                    className="text-[var(--muted-foreground)] hover:text-red-500 transition-colors flex-shrink-0"
+                  >
                     <X size={13} />
                   </button>
                 </li>
@@ -1341,7 +1569,9 @@ function UploadStep({
           onClick={onSkip}
           className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
         >
-          <span className="text-base">‹</span> <span className="hidden sm:inline">I don&apos;t have anything yet</span><span className="sm:hidden">Skip</span>
+          <span className="text-base">‹</span>{' '}
+          <span className="hidden sm:inline">I don&apos;t have anything yet</span>
+          <span className="sm:hidden">Skip</span>
         </button>
         <button
           onClick={() => onSubmit(files)}
@@ -1377,7 +1607,11 @@ export default function NewProductFlow() {
     if (rfqMethod === 'complete') {
       // Save a stub product and go to products list
       const now = new Date();
-      const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const dateStr = now.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
       const title = deriveProductName(productText) || 'New Product';
       saveProduct({
         id: `prod-rfq-${Date.now()}`,
@@ -1402,7 +1636,7 @@ export default function NewProductFlow() {
           specs: 'Uploaded complete RFQ files.',
           buyer: 'Demo User',
         });
-      } catch(err) {
+      } catch (err) {
         console.error('Failed to submit RFQ to Admin', err);
       }
 
@@ -1415,7 +1649,14 @@ export default function NewProductFlow() {
   };
 
   if (step === 'intro') {
-    return <IntroStep onNext={(text) => { setProductText(text); setStep('transition'); }} />;
+    return (
+      <IntroStep
+        onNext={(text) => {
+          setProductText(text);
+          setStep('transition');
+        }}
+      />
+    );
   }
   if (step === 'transition') {
     return <TransitionStep productText={productText} onNext={() => setStep('choose')} />;

@@ -2,7 +2,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { DollarSign, Package, TrendingUp, AlertTriangle, Clock, Truck, Calendar } from 'lucide-react';
+import {
+  DollarSign,
+  Package,
+  TrendingUp,
+  AlertTriangle,
+  Clock,
+  Truck,
+  Calendar,
+} from 'lucide-react';
 import KpiCard from './KpiCard';
 import ActivityFeed from './ActivityFeed';
 import ChatButton from '@/components/ui/ChatButton';
@@ -35,27 +43,51 @@ const DEMO_EMAILS = new Set(['demo@proquoment.com', 'buyer@proquoment.com']);
 // ── Static demo KPI data (shown only to demo account) ────────────────────────
 const DEMO_KPI_DATA = {
   'range-7d': {
-    spend: '$12,300', spendSub: 'vs $9,800 prev. week', spendTrend: '+25.5% vs previous period',
-    active: '6', acceptance: '71%', acceptanceTrend: '+2.1% vs previous period',
-    actionRequired: '2', turnaround: '4.2 days', turnaroundTrend: '-0.5 days vs last period',
+    spend: '$12,300',
+    spendSub: 'vs $9,800 prev. week',
+    spendTrend: '+25.5% vs previous period',
+    active: '6',
+    acceptance: '71%',
+    acceptanceTrend: '+2.1% vs previous period',
+    actionRequired: '2',
+    turnaround: '4.2 days',
+    turnaroundTrend: '-0.5 days vs last period',
     ordersInProgress: '3',
   },
   'range-30d': {
-    spend: '$38,950', spendSub: 'vs $31,200 prev. month', spendTrend: '+24.9% vs previous period',
-    active: '6', acceptance: '68%', acceptanceTrend: '-3.1% vs previous period',
-    actionRequired: '2', turnaround: '5.1 days', turnaroundTrend: '-0.8 days vs last period',
+    spend: '$38,950',
+    spendSub: 'vs $31,200 prev. month',
+    spendTrend: '+24.9% vs previous period',
+    active: '6',
+    acceptance: '68%',
+    acceptanceTrend: '-3.1% vs previous period',
+    actionRequired: '2',
+    turnaround: '5.1 days',
+    turnaroundTrend: '-0.8 days vs last period',
     ordersInProgress: '3',
   },
   'range-monthly': {
-    spend: '$38,950', spendSub: 'April 2026', spendTrend: '+24.9% vs March',
-    active: '6', acceptance: '68%', acceptanceTrend: '-3.1% vs March',
-    actionRequired: '2', turnaround: '5.1 days', turnaroundTrend: '-0.8 days vs March',
+    spend: '$38,950',
+    spendSub: 'April 2026',
+    spendTrend: '+24.9% vs March',
+    active: '6',
+    acceptance: '68%',
+    acceptanceTrend: '-3.1% vs March',
+    actionRequired: '2',
+    turnaround: '5.1 days',
+    turnaroundTrend: '-0.8 days vs March',
     ordersInProgress: '3',
   },
   'range-custom': {
-    spend: '$172,450', spendSub: 'Nov 2025 – May 2026', spendTrend: '+31.2% vs prior 6 months',
-    active: '6', acceptance: '67%', acceptanceTrend: '-1.8% overall',
-    actionRequired: '2', turnaround: '5.4 days', turnaroundTrend: 'Period average',
+    spend: '$172,450',
+    spendSub: 'Nov 2025 – May 2026',
+    spendTrend: '+31.2% vs prior 6 months',
+    active: '6',
+    acceptance: '67%',
+    acceptanceTrend: '-1.8% overall',
+    actionRequired: '2',
+    turnaround: '5.4 days',
+    turnaroundTrend: 'Period average',
     ordersInProgress: '3',
   },
 };
@@ -132,45 +164,50 @@ export default function OverviewDashboardContent() {
 
     // ── Real user: calculate live KPIs from their actual Supabase data ──────
     setKpiLoading(true);
-    productService.getAll().then((products) => {
-      // Only count real user products (not static demo ones)
-      const userProducts = products.filter((p) => !p.isStatic);
-      const total = userProducts.length;
+    productService
+      .getAll()
+      .then((products) => {
+        // Only count real user products (not static demo ones)
+        const userProducts = products.filter((p) => !p.isStatic);
+        const total = userProducts.length;
 
-      const activeQuoting = userProducts.filter((p) => p.stage === 'Quoting').length;
-      const actionRequired = userProducts.filter((p) => p.status === 'Action Required').length;
-      const inProduction = userProducts.filter(
-        (p) => p.stage === 'Production' || p.stage === 'Sampling'
-      ).length;
-      const completed = userProducts.filter((p) => p.stage === 'Completed').length;
+        const activeQuoting = userProducts.filter((p) => p.stage === 'Quoting').length;
+        const actionRequired = userProducts.filter((p) => p.status === 'Action Required').length;
+        const inProduction = userProducts.filter(
+          (p) => p.stage === 'Production' || p.stage === 'Sampling'
+        ).length;
+        const completed = userProducts.filter((p) => p.stage === 'Completed').length;
 
-      if (total === 0) {
+        if (total === 0) {
+          setLiveKpi(EMPTY_KPI);
+        } else {
+          setLiveKpi({
+            spend: completed > 0 ? `${completed} completed` : 'In progress',
+            spendSub: `${total} product${total > 1 ? 's' : ''} sourced`,
+            spendTrend:
+              activeQuoting > 0 ? `${activeQuoting} currently in quoting` : 'No active quotes',
+            active: String(activeQuoting),
+            acceptance: total > 0 ? `${Math.round((completed / total) * 100)}%` : '—',
+            acceptanceTrend:
+              completed > 0
+                ? `${completed} product${completed > 1 ? 's' : ''} completed`
+                : 'No completed products yet',
+            actionRequired: String(actionRequired),
+            turnaround: '—',
+            turnaroundTrend: 'Based on your RFQ history',
+            ordersInProgress: String(inProduction),
+          });
+        }
+        setKpiLoading(false);
+      })
+      .catch(() => {
         setLiveKpi(EMPTY_KPI);
-      } else {
-        setLiveKpi({
-          spend: completed > 0 ? `${completed} completed` : 'In progress',
-          spendSub: `${total} product${total > 1 ? 's' : ''} sourced`,
-          spendTrend: activeQuoting > 0 ? `${activeQuoting} currently in quoting` : 'No active quotes',
-          active: String(activeQuoting),
-          acceptance: total > 0 ? `${Math.round((completed / total) * 100)}%` : '—',
-          acceptanceTrend: completed > 0 ? `${completed} product${completed > 1 ? 's' : ''} completed` : 'No completed products yet',
-          actionRequired: String(actionRequired),
-          turnaround: '—',
-          turnaroundTrend: 'Based on your RFQ history',
-          ordersInProgress: String(inProduction),
-        });
-      }
-      setKpiLoading(false);
-    }).catch(() => {
-      setLiveKpi(EMPTY_KPI);
-      setKpiLoading(false);
-    });
+        setKpiLoading(false);
+      });
   }, [user]);
 
   // ── Decide which KPI set to show ───────────────────────────────────────────
-  const kpi = isDemo
-    ? DEMO_KPI_DATA[activeRange as keyof typeof DEMO_KPI_DATA]
-    : liveKpi;
+  const kpi = isDemo ? DEMO_KPI_DATA[activeRange as keyof typeof DEMO_KPI_DATA] : liveKpi;
 
   // ── Greeting name: org name > user name > fallback ─────────────────────────
   const displayName = orgName || userName || '';
@@ -206,16 +243,17 @@ export default function OverviewDashboardContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-[var(--foreground)]">
-            {greeting}{displayName ? `, ${displayName}` : ''}
+            {greeting}
+            {displayName ? `, ${displayName}` : ''}
           </h1>
           <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
             {isDemo
               ? "Here's what's happening with your sourcing today."
               : kpiLoading
-              ? 'Loading your dashboard...'
-              : liveKpi.spend === '$0'
-              ? 'Welcome! Create your first product to start sourcing.'
-              : "Here's what's happening with your sourcing today."}
+                ? 'Loading your dashboard...'
+                : liveKpi.spend === '$0'
+                  ? 'Welcome! Create your first product to start sourcing.'
+                  : "Here's what's happening with your sourcing today."}
           </p>
         </div>
         <div className="flex items-center gap-1 bg-white border border-[var(--border)] rounded-lg p-1 self-start sm:self-auto">
@@ -280,7 +318,10 @@ export default function OverviewDashboardContent() {
       )}
 
       {/* KPI Cards */}
-      <div key={kpiKey} className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8 stagger-children">
+      <div
+        key={kpiKey}
+        className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8 stagger-children"
+      >
         <div className="animate-slide-up">
           <KpiCard
             label="Total Spend"
@@ -358,8 +399,12 @@ export default function OverviewDashboardContent() {
         <div className="bg-white rounded-xl border border-[var(--border)] p-4 md:p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm md:text-base font-semibold text-[var(--foreground)]">Total Spend Over Time</h2>
-              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Confirmed order value (USD)</p>
+              <h2 className="text-sm md:text-base font-semibold text-[var(--foreground)]">
+                Total Spend Over Time
+              </h2>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                Confirmed order value (USD)
+              </p>
             </div>
             <span className="text-xs text-[var(--muted-foreground)] bg-[var(--muted)] px-2 py-1 rounded-md">
               {chartLabel}
@@ -370,12 +415,20 @@ export default function OverviewDashboardContent() {
         <div className="bg-white rounded-xl border border-[var(--border)] p-4 md:p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm md:text-base font-semibold text-[var(--foreground)]">Quotes by Category</h2>
+              <h2 className="text-sm md:text-base font-semibold text-[var(--foreground)]">
+                Quotes by Category
+              </h2>
               <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Received vs. accepted</p>
             </div>
             <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#c7c5f8] inline-block" />Rcvd</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary inline-block" />Accpd</span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-[#c7c5f8] inline-block" />
+                Rcvd
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-primary inline-block" />
+                Accpd
+              </span>
             </div>
           </div>
           <QuotesByCategoryChart range={activeRange} />
@@ -385,7 +438,9 @@ export default function OverviewDashboardContent() {
       {/* Activity Feed */}
       <div className="bg-white rounded-xl border border-[var(--border)] p-4 md:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm md:text-base font-semibold text-[var(--foreground)]">Recent Activity</h2>
+          <h2 className="text-sm md:text-base font-semibold text-[var(--foreground)]">
+            Recent Activity
+          </h2>
           <button
             onClick={() => router.push('/products-list')}
             className="text-xs text-primary font-medium hover:underline"

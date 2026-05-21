@@ -29,24 +29,18 @@ export const metadata: Metadata = {
       { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
     ],
     apple: [{ url: '/apple-touch-icon.png' }],
-    other: [
-      { rel: 'manifest', url: '/site.webmanifest' },
-    ],
+    other: [{ rel: 'manifest', url: '/site.webmanifest' }],
   },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={plusJakartaSans.variable}>
       <body className={plusJakartaSans.className}>
         <AuthProvider>
-          <NotificationProvider>
-            {children}
-          </NotificationProvider>
+          <NotificationProvider>{children}</NotificationProvider>
         </AuthProvider>
-        <Analytics /> 
+        <Analytics />
       </body>
     </html>
   );
