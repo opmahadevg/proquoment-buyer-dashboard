@@ -72,27 +72,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
       },
     });
-    if (error) throw error;
 
-    // Bootstrap an empty buyer_profiles row immediately after signup
-    // (the DB trigger also does this, but we do it here as a safety net)
-    if (data?.user) {
-      try {
-        await getSupabase()
-          .from('buyer_profiles')
-          .upsert(
-            {
-              id: data.user.id,
-              email: data.user.email,
-              verification_status: 'pending',
-              // Pre-fill organization_name from signup form if provided
-              organization_name: (metadata as any)?.company || '',
-            },
-            { onConflict: 'id', ignoreDuplicates: true }
-          );
-      } catch {
-        // Non-fatal — DB trigger handles this as fallback
+    // "Database error saving new user" means a DB trigger failed.
+    // This is a Supabase-side issue (trigger not yet applied). Re-throw
+    // with a clearer message so AuthContent can display it.
+    if (error) {
+      if (
+        error.message?.toLowerCase().includes('database error') ||
+        error.message?.toLowerCase().includes('saving new user')
+      ) {
+        throw new Error(
+          'Account creation failed due to a server configuration issue. Please contact support or try again in a moment.'
+        );
       }
+      throw error;
+    }
+
+    // Post-signup: bootstrap buyer_profiles row (DB trigger also does this).
+    // Each call is individually guarded so one failure never surfaces to the user.
+    if (data?.user) {
+      // Upsert blank buyer_profiles row
+      getSupabase()
+        .from('buyer_profiles')
+        .upsert(
+          {
+            id: data.user.id,
+            email: data.user.email,
+            verification_status: 'pending',
+            organization_name: (metadata as any)?.company || '',
+          },
+          { onConflict: 'id', ignoreDuplicates: true }
+        )
+        .then(({ error: e }) => {
+          if (e) console.warn('buyer_profiles bootstrap skipped (non-fatal):', e.message);
+        })
+        .catch(() => {});
     }
 
     return data;
