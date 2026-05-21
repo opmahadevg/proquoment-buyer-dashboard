@@ -96,11 +96,7 @@ export default function AccountContent() {
         const dbProfile = await fetchCurrentBuyerProfile();
 
         if (dbProfile) {
-          const hasData = !!(
-            dbProfile.organization_name ||
-            dbProfile.email ||
-            dbProfile.phone
-          );
+          const hasData = !!(dbProfile.organization_name || dbProfile.email || dbProfile.phone);
 
           if (hasData) {
             // Existing account with data — load from DB
@@ -188,9 +184,7 @@ export default function AccountContent() {
               });
               setVerificationStatus(updated.verification_status || 'pending');
               if (updated.verification_status) {
-                toast.info(
-                  `Account status updated: ${updated.verification_status.toUpperCase()}`
-                );
+                toast.info(`Account status updated: ${updated.verification_status.toUpperCase()}`);
               }
               setIsNewAccount(false);
             }
@@ -345,9 +339,7 @@ export default function AccountContent() {
                   )}
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  {form.legalName || (
-                    <span className="italic">Legal name not set</span>
-                  )}
+                  {form.legalName || <span className="italic">Legal name not set</span>}
                 </p>
               </div>
             </div>

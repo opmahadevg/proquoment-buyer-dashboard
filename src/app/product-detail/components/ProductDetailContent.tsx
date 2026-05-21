@@ -24,6 +24,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { getProductDetailData, ALL_PRODUCT_DETAIL_DATA } from '@/lib/productDetailData';
 import { getStoredProducts, saveProduct, StoredProduct } from '@/lib/productStore';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   productService,
   rfqService,
@@ -57,6 +58,7 @@ export default function ProductDetailContent() {
     specifications: true,
     manufacturingNotes: true,
   });
+  const { user } = useAuth();
 
   // Supabase data
   const [dbProduct, setDbProduct] = useState<DbProduct | null>(null);
@@ -81,14 +83,14 @@ export default function ProductDetailContent() {
   // Load from localStorage (legacy)
   useEffect(() => {
     const load = () => {
-      const stored = getStoredProducts();
+      const stored = getStoredProducts(user?.id);
       const found = stored.find((p) => p.id === productId) ?? null;
       setStoredProduct(found);
     };
     load();
     window.addEventListener('proquoment_products_updated', load);
     return () => window.removeEventListener('proquoment_products_updated', load);
-  }, [productId]);
+  }, [productId, user?.id]);
 
   // Load from Supabase
   useEffect(() => {

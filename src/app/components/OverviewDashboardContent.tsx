@@ -410,7 +410,7 @@ export default function OverviewDashboardContent() {
               {chartLabel}
             </span>
           </div>
-          <SpendChart range={chartRange} />
+          <SpendChart range={chartRange} isDemo={isDemo} />
         </div>
         <div className="bg-white rounded-xl border border-[var(--border)] p-4 md:p-6">
           <div className="flex items-center justify-between mb-4">
@@ -431,7 +431,7 @@ export default function OverviewDashboardContent() {
               </span>
             </div>
           </div>
-          <QuotesByCategoryChart range={activeRange} />
+          <QuotesByCategoryChart range={activeRange} isDemo={isDemo} />
         </div>
       </div>
 
@@ -448,7 +448,7 @@ export default function OverviewDashboardContent() {
             View all
           </button>
         </div>
-        <ActivityFeed limit={6} />
+        <ActivityFeed limit={6} isDemo={isDemo} />
       </div>
 
       <ChatButton />

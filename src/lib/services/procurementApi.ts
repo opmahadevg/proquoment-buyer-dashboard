@@ -153,10 +153,7 @@ export async function fetchBuyerQCReports() {
   if (!userId) return [];
 
   // QC reports are linked to orders; only fetch for this buyer's orders
-  const { data: orderIds } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('buyer_id', userId);
+  const { data: orderIds } = await supabase.from('orders').select('id').eq('buyer_id', userId);
 
   const ids = (orderIds || []).map((o: any) => o.id);
   if (ids.length === 0) return [];
@@ -190,10 +187,7 @@ export async function fetchBuyerShipments() {
   if (!userId) return [];
 
   // Shipments scoped to this buyer's orders
-  const { data: orderIds } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('buyer_id', userId);
+  const { data: orderIds } = await supabase.from('orders').select('id').eq('buyer_id', userId);
 
   const ids = (orderIds || []).map((o: any) => o.id);
   if (ids.length === 0) return [];
@@ -232,10 +226,7 @@ export async function fetchBuyerInvoices() {
   const userId = await getUserId();
   if (!userId) return [];
 
-  const { data: orderIds } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('buyer_id', userId);
+  const { data: orderIds } = await supabase.from('orders').select('id').eq('buyer_id', userId);
 
   const ids = (orderIds || []).map((o: any) => o.id);
   if (ids.length === 0) return [];
@@ -300,10 +291,7 @@ export async function fetchBuyerDocuments() {
   const userId = await getUserId();
   if (!userId) return [];
 
-  const { data: orderIds } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('buyer_id', userId);
+  const { data: orderIds } = await supabase.from('orders').select('id').eq('buyer_id', userId);
 
   const ids = (orderIds || []).map((o: any) => o.id);
   if (ids.length === 0) return [];
@@ -454,11 +442,7 @@ export async function acceptQuote(quoteId: string, rfqId: string) {
   if (error) throw error;
 
   // Update RFQ status (scoped to buyer)
-  await supabase
-    .from('rfqs')
-    .update({ status: 'accepted' })
-    .eq('id', rfqId)
-    .eq('buyer_id', userId);
+  await supabase.from('rfqs').update({ status: 'accepted' }).eq('id', rfqId).eq('buyer_id', userId);
 
   // Fetch Quote data
   const { data: quote } = await supabase.from('quotes').select('*').eq('id', quoteId).single();
@@ -547,11 +531,7 @@ export async function markNotificationRead(id: number) {
   if (!userId) return;
 
   // Only mark notifications that belong to this buyer
-  await supabase
-    .from('notifications')
-    .update({ read: true })
-    .eq('id', id)
-    .eq('buyer_id', userId);
+  await supabase.from('notifications').update({ read: true }).eq('id', id).eq('buyer_id', userId);
 }
 
 export async function createNotification(params: {
@@ -586,10 +566,7 @@ export async function fetchBuyerMilestones() {
   if (!userId) return [];
 
   // Milestones linked to this buyer's orders
-  const { data: orderIds } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('buyer_id', userId);
+  const { data: orderIds } = await supabase.from('orders').select('id').eq('buyer_id', userId);
 
   const ids = (orderIds || []).map((o: any) => o.id);
   if (ids.length === 0) return [];

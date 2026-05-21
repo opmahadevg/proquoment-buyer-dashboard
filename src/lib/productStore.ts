@@ -17,37 +17,52 @@ export interface StoredProduct {
   imageAlt: string;
 }
 
-const STORAGE_KEY = 'proquoment_products';
+function storageKey(userId?: string): string {
+  return userId ? `proquoment_products_${userId}` : 'proquoment_products';
+}
 
 // ── Local storage helpers (kept for offline/fallback) ──────────────────────
 
-export function getStoredProducts(): StoredProduct[] {
+export function getStoredProducts(userId?: string): StoredProduct[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId));
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
 
-function saveToLocalStorage(product: StoredProduct): void {
+function saveToLocalStorage(product: StoredProduct, userId?: string): void {
   if (typeof window === 'undefined') return;
-  const existing = getStoredProducts();
+  const existing = getStoredProducts(userId);
   const idx = existing.findIndex((p) => p.id === product.id);
   if (idx !== -1) {
     existing[idx] = product;
   } else {
     existing.unshift(product);
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+  localStorage.setItem(storageKey(userId), JSON.stringify(existing));
 }
 
 // ── Main save function — persists to Supabase + localStorage ───────────────
 
 export async function saveProduct(product: StoredProduct): Promise<void> {
+  // Fetch user ID asynchronously from Supabase for local storage scoping
+  let userId: string | undefined = undefined;
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    if (supabase) {
+      const { data: { user } } = await supabase.auth.getUser();
+      userId = user?.id;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch user ID for saveProduct scoping:', err);
+  }
+
   // Always save to localStorage as immediate fallback
-  saveToLocalStorage(product);
+  saveToLocalStorage(product, userId);
 
   // Dispatch event for any listeners
   if (typeof window !== 'undefined') {

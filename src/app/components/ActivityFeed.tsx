@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { activityService, DbActivityItem } from '@/lib/services/dbService';
 import { getStoredProducts } from '@/lib/productStore';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ICON_MAP: Record<string, { icon: any; iconBg: string; iconColor: string }> = {
   quote: { icon: FileText, iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
@@ -76,12 +77,14 @@ function timeAgo(dateStr: string): string {
 
 interface ActivityFeedProps {
   limit?: number;
+  isDemo?: boolean;
 }
 
-export default function ActivityFeed({ limit = 10 }: ActivityFeedProps) {
+export default function ActivityFeed({ limit = 10, isDemo = false }: ActivityFeedProps) {
   const router = useRouter();
   const [activities, setActivities] = useState<DbActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
   useEffect(() => {
     const load = async () => {
@@ -120,7 +123,7 @@ export default function ActivityFeed({ limit = 10 }: ActivityFeedProps) {
           const merged = [...notifActivities, ...dbData].slice(0, limit);
           setActivities(merged);
         } else {
-          const localProducts = getStoredProducts();
+          const localProducts = getStoredProducts(user?.id);
           const localActivities: DbActivityItem[] = localProducts.slice(0, 3).map((p, i) => ({
             id: `local-${p.id}`,
             activityType: i === 0 ? 'product' : i === 1 ? 'quote' : 'action',
@@ -140,17 +143,17 @@ export default function ActivityFeed({ limit = 10 }: ActivityFeedProps) {
             createdAt: p.updated || new Date().toISOString(),
           }));
 
-          const combined = [...localActivities, ...STATIC_FALLBACK];
+          const combined = isDemo ? [...localActivities, ...STATIC_FALLBACK] : localActivities;
           setActivities(combined.slice(0, limit));
         }
       } catch (err) {
-        setActivities(STATIC_FALLBACK.slice(0, limit));
+        setActivities(isDemo ? STATIC_FALLBACK.slice(0, limit) : []);
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [limit]);
+  }, [limit, isDemo, user?.id]);
 
   const handleItemClick = (item: DbActivityItem) => {
     // Notification items have id starting with 'notif-'

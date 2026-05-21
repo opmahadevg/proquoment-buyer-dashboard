@@ -621,10 +621,7 @@ export const rfqService = {
       const product = await productService.getById(productId);
       if (!product) return null;
 
-      const { data, error } = await supabase
-        .from('rfqs')
-        .select('*')
-        .eq('buyer_id', user.id); // Scoped to buyer
+      const { data, error } = await supabase.from('rfqs').select('*').eq('buyer_id', user.id); // Scoped to buyer
 
       if (error) {
         if (isSchemaError(error)) throw error;
@@ -663,10 +660,7 @@ export const rfqService = {
       const product = await productService.getById(productId);
       if (!product) return;
 
-      const { data } = await supabase
-        .from('rfqs')
-        .select('*')
-        .eq('buyer_id', user.id); // Scoped to buyer
+      const { data } = await supabase.from('rfqs').select('*').eq('buyer_id', user.id); // Scoped to buyer
 
       const matched = data?.find((row) => isProductMatch(row.product, product.name));
       if (matched) {
@@ -811,10 +805,7 @@ export const orderService = {
       const product = await productService.getById(productId);
       if (!product) return [];
 
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('buyer_id', user.id); // Scoped to buyer
+      const { data, error } = await supabase.from('orders').select('*').eq('buyer_id', user.id); // Scoped to buyer
 
       if (error) {
         if (isSchemaError(error)) throw error;

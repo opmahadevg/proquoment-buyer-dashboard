@@ -9,8 +9,11 @@ import { productService, DbProduct } from '@/lib/services/dbService';
 import { getStoredProducts } from '@/lib/productStore';
 import { ALL_PRODUCT_DETAIL_DATA } from '@/lib/productDetailData';
 import { Loader2, Sparkles } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 type Tab = 'sourcing' | 'drafts' | 'archived';
+
+const DEMO_EMAILS = new Set(['demo@proquoment.com', 'buyer@proquoment.com']);
 
 const STATIC_PRODUCTS: DbProduct[] = Object.values(ALL_PRODUCT_DETAIL_DATA).map((p) => ({
   id: p.id,
@@ -28,8 +31,8 @@ const STATIC_PRODUCTS: DbProduct[] = Object.values(ALL_PRODUCT_DETAIL_DATA).map(
   isStatic: true,
 }));
 
-function mergeWithLocalStorage(base: DbProduct[]): DbProduct[] {
-  const stored = getStoredProducts();
+function mergeWithLocalStorage(base: DbProduct[], userId?: string): DbProduct[] {
+  const stored = getStoredProducts(userId);
   if (!stored.length) return base;
   const baseIds = new Set(base.map((p) => p.id));
   const localAsDb: DbProduct[] = stored
@@ -56,27 +59,32 @@ export default function ProductsListContent() {
   const [activeTab, setActiveTab] = useState<Tab>('sourcing');
   const [products, setProducts] = useState<DbProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
   const loadProducts = async () => {
     try {
       const data = await productService.getAll();
-      const base = data && data.length > 0 ? data : STATIC_PRODUCTS;
-      setProducts(mergeWithLocalStorage(base));
+      const isDemo = user?.email ? DEMO_EMAILS.has(user.email) : false;
+      const base = data && data.length > 0 ? data : isDemo ? STATIC_PRODUCTS : [];
+      setProducts(mergeWithLocalStorage(base, user?.id));
     } catch {
-      setProducts(mergeWithLocalStorage(STATIC_PRODUCTS));
+      const isDemo = user?.email ? DEMO_EMAILS.has(user.email) : false;
+      setProducts(mergeWithLocalStorage(isDemo ? STATIC_PRODUCTS : [], user?.id));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadProducts();
+    if (user) {
+      loadProducts();
+    }
     const refresh = () => {
-      setProducts((prev) => mergeWithLocalStorage(prev));
+      setProducts((prev) => mergeWithLocalStorage(prev, user?.id));
     };
     window.addEventListener('proquoment_products_updated', refresh);
     return () => window.removeEventListener('proquoment_products_updated', refresh);
-  }, []);
+  }, [user]);
 
   const sourcingProducts = products.filter((p) => p.stage !== 'Draft');
   const draftProducts = products.filter((p) => p.stage === 'Draft');
