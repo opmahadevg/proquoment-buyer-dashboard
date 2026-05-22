@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
-import AnnouncementBanner from './AnnouncementBanner';
+import NotificationCenter from './NotificationCenter';
 import PageTransition from './PageTransition';
 import { Toaster } from 'sonner';
 import { useRealtimeNotifications } from '@/lib/hooks/useRealtimeNotifications';
 import { userProfileService } from '@/lib/services/dbService';
+import { useAuth } from '@/contexts/AuthContext';
 import { LayoutDashboard, Package, Building2, Settings, Sparkles, Menu, X } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -22,8 +23,28 @@ const BOTTOM_NAV = [
   { href: '/account', icon: Settings, label: 'Account' },
 ];
 
+const PATH_TITLES: Record<string, string> = {
+  '/': 'Overview',
+  '/products-list': 'Products',
+  '/new-product': 'New Product Sourcing',
+  '/organization': 'Organization',
+  '/rfq': 'My RFQs',
+  '/quotes': 'Quotes',
+  '/orders': 'My Orders',
+  '/shipments': 'Shipments',
+  '/messages': 'Messages',
+  '/account': 'Account Settings',
+};
+
+const getPageTitle = (path: string) => {
+  if (path === '/') return 'Overview';
+  const match = Object.keys(PATH_TITLES).find(k => k !== '/' && path.startsWith(k));
+  return match ? PATH_TITLES[match] : 'Buyer Dashboard';
+};
+
 export default function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
@@ -88,8 +109,29 @@ export default function AppLayout({ children }: AppLayoutProps) {
               : 0,
         }}
       >
+        {/* Desktop Top Header */}
+        <div className="hidden md:flex items-center justify-between px-6 bg-white border-b border-[var(--border)] sticky top-0 z-30 min-h-[56px] h-[56px] flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <h1 className="text-sm font-bold text-[var(--foreground)] tracking-tight">
+              {getPageTitle(pathname)}
+            </h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <NotificationCenter />
+            <div className="h-5 w-[1px] bg-[var(--border)]" />
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold ring-2 ring-[var(--secondary)] flex-shrink-0">
+                {user?.email ? user.email.charAt(0).toUpperCase() : 'B'}
+              </div>
+              <span className="text-xs font-medium text-[var(--muted-foreground)] truncate max-w-[120px]">
+                {user?.email ? user.email.split('@')[0] : 'Buyer'}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Mobile Top Header */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-[var(--border)] sticky top-0 z-30">
+        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-[var(--border)] sticky top-0 z-30 min-h-[56px] h-[56px] flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
               <img
@@ -102,15 +144,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
               Proquoment
             </span>
           </div>
-          <button
-            onClick={() => setMobileSidebarOpen(true)}
-            className="p-2 rounded-lg hover:bg-[var(--muted)] transition-colors"
-          >
-            <Menu size={20} className="text-[var(--foreground)]" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <NotificationCenter />
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="p-2 rounded-lg hover:bg-[var(--muted)] transition-colors"
+            >
+              <Menu size={20} className="text-[var(--foreground)]" />
+            </button>
+          </div>
         </div>
-
-        <AnnouncementBanner message="Labor Day Notice: Asia production pauses May 1–6. Expect slower responses in this period." />
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
           <PageTransition>{children}</PageTransition>

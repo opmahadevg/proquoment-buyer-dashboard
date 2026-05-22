@@ -18,7 +18,6 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import NotificationCenter from './NotificationCenter';
 
 interface SidebarProps {
   open: boolean;
@@ -116,21 +115,6 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
           )}
         </Link>
 
-        {/* Notifications */}
-        <div className="flex items-center gap-3 px-1 py-1 rounded-lg text-sm font-medium transition-all duration-150 group relative">
-          <NotificationCenter />
-          <span
-            className="whitespace-nowrap overflow-hidden transition-all duration-200 text-[var(--muted-foreground)]"
-            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
-          >
-            Notifications
-          </span>
-          {!open && (
-            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
-              Notifications
-            </div>
-          )}
-        </div>
 
         {/* Products */}
         <Link

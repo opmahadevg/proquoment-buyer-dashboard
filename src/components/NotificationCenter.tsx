@@ -98,7 +98,7 @@ export default function NotificationCenter() {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute left-0 mt-2 w-80 sm:w-96 rounded-xl border border-gray-200 bg-white shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden transform origin-top-left transition-all duration-200">
+        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl border border-gray-200 bg-white shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden transform origin-top-right transition-all duration-200">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
             <span className="font-semibold text-sm text-gray-800">Notifications</span>
