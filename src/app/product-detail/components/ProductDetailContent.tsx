@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import AppImage from '@/components/ui/AppImage';
@@ -65,9 +65,14 @@ export default function ProductDetailContent() {
   const [dbRfq, setDbRfq] = useState<DbRfqSpec | null>(null);
   const [dbQuoteSteps, setDbQuoteSteps] = useState<DbQuoteStep[]>([]);
   const [dbOrders, setDbOrders] = useState<DbOrder[]>([]);
-  const [dbSamples, setDbSamples] = useState<{ samples: DbSample[]; references: DbSample[] }>({
+  const [dbSamples, setDbSamples] = useState<{
+    samples: DbSample[];
+    references: DbSample[];
+    receivedQuotes: any[];
+  }>({
     samples: [],
     references: [],
+    receivedQuotes: [],
   });
   const [dbFiles, setDbFiles] = useState<DbProductFile[]>([]);
   const [dbUpdates, setDbUpdates] = useState<{
@@ -93,34 +98,35 @@ export default function ProductDetailContent() {
   }, [productId, user?.id]);
 
   // Load from Supabase
-  useEffect(() => {
-    const loadFromDb = async () => {
-      setDbLoading(true);
-      try {
-        const [prod, rfq, quotes, orders, samples, files, updates] = await Promise.all([
-          productService.getById(productId),
-          rfqService.getByProductId(productId),
-          quoteService.getByProductId(productId),
-          orderService.getByProductId(productId),
-          sampleService.getByProductId(productId),
-          fileService.getByProductId(productId),
-          updateService.getByProductId(productId),
-        ]);
-        setDbProduct(prod);
-        setDbRfq(rfq);
-        setDbQuoteSteps(quotes);
-        setDbOrders(orders);
-        setDbSamples(samples);
-        setDbFiles(files);
-        setDbUpdates(updates);
-      } catch (err) {
-        console.error('Failed to load product detail from Supabase:', err);
-      } finally {
-        setDbLoading(false);
-      }
-    };
-    loadFromDb();
+  const loadFromDb = useCallback(async () => {
+    setDbLoading(true);
+    try {
+      const [prod, rfq, quotes, orders, samples, files, updates] = await Promise.all([
+        productService.getById(productId),
+        rfqService.getByProductId(productId),
+        quoteService.getByProductId(productId),
+        orderService.getByProductId(productId),
+        sampleService.getByProductId(productId),
+        fileService.getByProductId(productId),
+        updateService.getByProductId(productId),
+      ]);
+      setDbProduct(prod);
+      setDbRfq(rfq);
+      setDbQuoteSteps(quotes);
+      setDbOrders(orders);
+      setDbSamples(samples);
+      setDbFiles(files);
+      setDbUpdates(updates);
+    } catch (err) {
+      console.error('Failed to load product detail from Supabase:', err);
+    } finally {
+      setDbLoading(false);
+    }
   }, [productId]);
+
+  useEffect(() => {
+    loadFromDb();
+  }, [loadFromDb]);
 
   // Subscribe to real-time database changes for this product
   useEffect(() => {
@@ -152,6 +158,8 @@ export default function ProductDetailContent() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'quotes' }, async () => {
         const quotes = await quoteService.getByProductId(productId);
         setDbQuoteSteps(quotes);
+        const samples = await sampleService.getByProductId(productId);
+        setDbSamples(samples);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
         const orders = await orderService.getByProductId(productId);
@@ -273,6 +281,7 @@ export default function ProductDetailContent() {
             stage: r.stage,
             requested: r.requested,
           })),
+          receivedQuotes: dbSamples.receivedQuotes || [],
         },
       };
     }
@@ -343,7 +352,7 @@ export default function ProductDetailContent() {
         },
         orders: { orders: [], steps: [] },
         files: [],
-        samples: { samples: [], references: [] },
+        samples: { samples: [], references: [], receivedQuotes: [] },
       };
     }
     return FALLBACK_PRODUCT;
@@ -541,6 +550,9 @@ export default function ProductDetailContent() {
             <SamplesTab
               samples={product?.samples?.samples ?? []}
               references={product?.samples?.references ?? []}
+              receivedQuotes={(product?.samples as any)?.receivedQuotes ?? []}
+              rfqId={dbRfq?.id}
+              onRefresh={loadFromDb}
             />
           )}
           {activeTab === 'orders' && (

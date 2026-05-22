@@ -526,6 +526,105 @@ export async function rejectQuote(quoteId: string, rfqId: string) {
   });
 }
 
+export async function acceptSampleQuote(quoteId: string, rfqId: string) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('No Supabase client');
+
+  const userId = await requireUserId();
+
+  // 1. Update Quote status to accepted
+  const { error: quoteErr } = await supabase.from('quotes').update({ status: 'accepted' }).eq('id', quoteId);
+  if (quoteErr) throw quoteErr;
+
+  // 2. Fetch the quote and the RFQ details
+  const { data: quote, error: getQuoteErr } = await supabase.from('quotes').select('*').eq('id', quoteId).single();
+  if (getQuoteErr) throw getQuoteErr;
+
+  const { data: rfq, error: getRfqErr } = await supabase.from('rfqs').select('*').eq('id', rfqId).single();
+  if (getRfqErr) throw getRfqErr;
+
+  // Update RFQ status to 'converted' to advance the stage to Sampling
+  await supabase.from('rfqs').update({ status: 'converted' }).eq('id', rfqId).eq('buyer_id', userId);
+
+  // 3. Resolve buyer name and logo
+  let buyerName = rfq?.buyer || 'Enterprise Buyer';
+  let buyerLogo = 'EB';
+  try {
+    const { data: profile } = await supabase
+      .from('buyer_profiles')
+      .select('organization_name, legal_name')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profile?.organization_name) {
+      buyerName = profile.organization_name;
+      buyerLogo = profile.organization_name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase();
+    } else if (profile?.legal_name) {
+      buyerName = profile.legal_name;
+      buyerLogo = profile.legal_name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase();
+    }
+  } catch (e) {
+    console.error('Error fetching buyer profile for sample order:', e);
+  }
+
+  // 4. Insert sample order in sample_orders table
+  const sampleOrderId = `SO-${Date.now().toString(36).toUpperCase()}`;
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const { error: sampleErr } = await supabase.from('sample_orders').insert({
+    id: sampleOrderId,
+    product: rfq?.product || 'Custom Product',
+    buyer_name: buyerName,
+    buyer_logo: buyerLogo,
+    quantity: `${quote?.moq || 1} samples`,
+    status: 'Pending',
+    requested_at: todayStr,
+    delivered_at: '—',
+    is_demo: false,
+    buyer_id: userId
+  });
+  if (sampleErr) throw sampleErr;
+
+  // 5. Notify admin
+  await supabase.from('notifications').insert({
+    target_dashboard: 'admin',
+    order_id: sampleOrderId,
+    type: 'sample_requested',
+    title: `Sample Ordered: ${rfq?.product}`,
+    message: `${buyerName} ordered sample from ${quote?.supplier_name || 'supplier'}. Sample order ${sampleOrderId} created.`,
+    action_url: `/samples`,
+    read: false
+  });
+
+  // 6. Notify supplier
+  try {
+    if (quote?.supplier_id) {
+      await supabase.from('notifications').insert({
+        target_dashboard: 'supplier',
+        type: 'sample_requested',
+        title: `New Sample Order: ${rfq?.product}`,
+        message: `Buyer accepted your sample quote! Please prepare and ship the sample.`,
+        read: false
+      });
+
+      await supabase.from('messages').insert({
+        id: `MSG-SAMPLE-${Date.now()}`,
+        from_name: 'Admin',
+        to_name: quote?.supplier_name || 'Supplier',
+        subject: `Sample Order: ${rfq?.product}`,
+        text: `Congratulations! Buyer has accepted your sample bid and ordered a sample. Sample Order ID: ${sampleOrderId}. Please ship as soon as possible.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        type: 'supplier',
+        read: false
+      });
+    }
+  } catch (e) {
+    console.error('Error notifying supplier:', e);
+  }
+
+  return sampleOrderId;
+}
+
 export async function confirmDelivery(shipmentId: string, orderId: string) {
   const supabase = getSupabase();
   if (!supabase) throw new Error('No Supabase client');

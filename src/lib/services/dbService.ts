@@ -842,16 +842,16 @@ export const orderService = {
 export const sampleService = {
   async getByProductId(
     productId: string
-  ): Promise<{ samples: DbSample[]; references: DbSample[] }> {
+  ): Promise<{ samples: DbSample[]; references: DbSample[]; receivedQuotes: any[] }> {
     const supabase = createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return { samples: [], references: [] };
+    if (!user) return { samples: [], references: [], receivedQuotes: [] };
 
     try {
       const product = await productService.getById(productId);
-      if (!product) return { samples: [], references: [] };
+      if (!product) return { samples: [], references: [], receivedQuotes: [] };
 
       const { data, error } = await supabase
         .from('sample_orders')
@@ -860,7 +860,7 @@ export const sampleService = {
 
       if (error) {
         if (isSchemaError(error)) throw error;
-        return { samples: [], references: [] };
+        return { samples: [], references: [], receivedQuotes: [] };
       }
 
       const matched = data?.filter((row) => isProductMatch(row.product, product.name)) || [];
@@ -880,13 +880,48 @@ export const sampleService = {
         creator: 'Buyer',
       }));
 
+      // Fetch forwarded sample quotes
+      let receivedQuotes: any[] = [];
+      const { data: rfqs, error: rfqErr } = await supabase
+        .from('rfqs')
+        .select('*')
+        .eq('buyer_id', user.id);
+      if (rfqErr && isSchemaError(rfqErr)) throw rfqErr;
+
+      const matchedRfq = rfqs?.find((r) => isProductMatch(r.product, product.name));
+      if (matchedRfq) {
+        const { data: quotes, error: quoteErr } = await supabase
+          .from('quotes')
+          .select('*')
+          .eq('rfq_id', matchedRfq.id)
+          .eq('quote_type', 'sample')
+          .eq('is_forwarded', true);
+
+        if (quoteErr && isSchemaError(quoteErr)) throw quoteErr;
+
+        receivedQuotes = (quotes || []).map((q) => ({
+          id: q.id,
+          rfqId: q.rfq_id,
+          supplierName: q.supplier_name,
+          supplierId: q.supplier_id,
+          unitPrice: q.supplier_unit_price || q.unit_price,
+          moq: q.moq || 1,
+          leadTimeDays: q.lead_time_days || q.days || 7,
+          paymentTerms: q.payment_terms || 'Net 30',
+          notes: q.notes,
+          validUntil: q.valid_until,
+          status: q.status,
+        }));
+      }
+
       return {
         samples: mappedSamples,
         references: [],
+        receivedQuotes,
       };
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
-      return { samples: [], references: [] };
+      return { samples: [], references: [], receivedQuotes: [] };
     }
   },
 };
