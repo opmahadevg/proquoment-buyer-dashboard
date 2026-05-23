@@ -141,13 +141,13 @@ export default function AuthContent() {
       <Toaster position="bottom-right" richColors />
 
       {/* Left brand panel */}
-      <div className="hidden lg:flex lg:w-[45%] xl:w-[40%] bg-primary flex-col justify-between p-10 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-10 w-40 h-40 rounded-full bg-white" />
-          <div className="absolute top-60 right-5 w-24 h-24 rounded-full bg-white" />
-          <div className="absolute bottom-40 left-20 w-32 h-32 rounded-full bg-white" />
-          <div className="absolute bottom-10 right-10 w-16 h-16 rounded-full bg-white" />
-        </div>
+      <div
+        className="hidden lg:flex lg:w-[45%] xl:w-[40%] flex-col justify-between p-10 relative overflow-hidden bg-cover bg-center"
+        style={{ backgroundImage: "url('/assets/images/login-bg.jpg')" }}
+      >
+        {/* Sleek dark gradient overlay for text readability and cinematic depth */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/35 to-black/80 z-0" />
+
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
             <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
@@ -176,11 +176,11 @@ export default function AuthContent() {
           </p>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">
-              H
+              J
             </div>
             <div>
-              <p className="text-white text-xs font-semibold">Honey Imtiaz</p>
-              <p className="text-white/60 text-xs">Founder, Honey&apos;s Org</p>
+              <p className="text-white text-xs font-semibold">John Buckley</p>
+              <p className="text-white/60 text-xs">Founder, Buckley Industries</p>
             </div>
           </div>
         </div>
