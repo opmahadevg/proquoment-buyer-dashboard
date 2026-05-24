@@ -937,6 +937,7 @@ export const sampleService = {
         receivedQuotes,
       };
     } catch (err: any) {
+      console.error('Error in sampleService.getByProductId:', err);
       if (isSchemaError(err)) throw err;
       return { samples: [], references: [], receivedQuotes: [] };
     }
