@@ -226,7 +226,7 @@ export default function SamplesTab({
                       )}
                       <div>
                         <h3 className="text-sm font-semibold text-[var(--foreground)]">
-                          {quote.supplierName || 'Verified Supplier'}
+                          {quote.supplierId ? `Supplier #${quote.supplierId}` : 'Verified Supplier'}
                         </h3>
                         <span className="text-xs text-[var(--muted-foreground)]">
                           Quote ID: {quote.id}

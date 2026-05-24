@@ -134,7 +134,7 @@ export async function fetchBuyerOrders() {
     id: r.id,
     product: r.product,
     buyer: r.buyer,
-    supplier: r.supplier,
+    supplier: r.supplier_id ? `Supplier #${r.supplier_id}` : 'Verified Supplier',
     supplierCity: r.supplier_city,
     value: r.value,
     stage: r.stage,
