@@ -621,14 +621,16 @@ export const rfqService = {
       const product = await productService.getById(productId);
       if (!product) return null;
 
-      const { data, error } = await supabase.from('rfqs').select('*').eq('buyer_id', user.id); // Scoped to buyer
+      const { data, error } = await supabase.from('rfqs').select('*').eq('buyer_id', user.id).order('created_at', { ascending: false }); // Scoped to buyer
 
       if (error) {
         if (isSchemaError(error)) throw error;
         return null;
       }
 
-      const matched = data?.find((row) => isProductMatch(row.product, product.name));
+      const matched = data?.find(
+        (row) => isProductMatch(row.product, product.name) && row.route_decision !== 'pending'
+      ) || data?.find((row) => isProductMatch(row.product, product.name));
       if (!matched) return null;
 
       return {
@@ -660,9 +662,11 @@ export const rfqService = {
       const product = await productService.getById(productId);
       if (!product) return;
 
-      const { data } = await supabase.from('rfqs').select('*').eq('buyer_id', user.id); // Scoped to buyer
+      const { data } = await supabase.from('rfqs').select('*').eq('buyer_id', user.id).order('created_at', { ascending: false }); // Scoped to buyer
 
-      const matched = data?.find((row) => isProductMatch(row.product, product.name));
+      const matched = data?.find(
+        (row) => isProductMatch(row.product, product.name) && row.route_decision !== 'pending'
+      ) || data?.find((row) => isProductMatch(row.product, product.name));
       if (matched) {
         const specsStr = JSON.stringify(specs);
         const descriptionStr = notes.map((n) => `${n.label}: ${n.value}`).join('\n');
@@ -696,10 +700,13 @@ export const quoteService = {
       const { data: rfqs, error: rfqErr } = await supabase
         .from('rfqs')
         .select('*')
-        .eq('buyer_id', user.id); // Scoped to buyer
+        .eq('buyer_id', user.id)
+        .order('created_at', { ascending: false }); // Scoped to buyer
       if (rfqErr && isSchemaError(rfqErr)) throw rfqErr;
 
-      const matchedRfq = rfqs?.find((r) => isProductMatch(r.product, product.name));
+      const matchedRfq = rfqs?.find(
+        (r) => isProductMatch(r.product, product.name) && r.route_decision !== 'pending'
+      ) || rfqs?.find((r) => isProductMatch(r.product, product.name));
       if (!matchedRfq) return [];
 
       const { data: quotes, error: quoteErr } = await supabase
@@ -880,10 +887,13 @@ export const sampleService = {
       const { data: rfqs, error: rfqErr } = await supabase
         .from('rfqs')
         .select('*')
-        .eq('buyer_id', user.id);
+        .eq('buyer_id', user.id)
+        .order('created_at', { ascending: false });
       if (rfqErr && isSchemaError(rfqErr)) throw rfqErr;
 
-      const matchedRfq = rfqs?.find((r) => isProductMatch(r.product, product.name));
+      const matchedRfq = rfqs?.find(
+        (r) => isProductMatch(r.product, product.name) && (r.route_decision === 'sample' || r.sample_rfq_id)
+      ) || rfqs?.find((r) => isProductMatch(r.product, product.name));
       let receivedQuotes: any[] = [];
 
       if (matchedRfq) {
