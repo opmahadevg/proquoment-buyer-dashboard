@@ -837,8 +837,6 @@ export const orderService = {
   },
 };
 
-// ── Samples ────────────────────────────────────────────────────────────────
-
 export const sampleService = {
   async getByProductId(
     productId: string
@@ -853,35 +851,32 @@ export const sampleService = {
       const product = await productService.getById(productId);
       if (!product) return { samples: [], references: [], receivedQuotes: [] };
 
-      const { data, error } = await supabase
+      // Fetch sample orders scoped to this buyer and product name
+      const { data: sampleOrdersData, error: ordersErr } = await supabase
         .from('sample_orders')
         .select('*')
-        .eq('buyer_id', user.id); // Scoped to buyer
+        .eq('buyer_id', user.id);
 
-      if (error) {
-        if (isSchemaError(error)) throw error;
-        return { samples: [], references: [], receivedQuotes: [] };
-      }
+      if (ordersErr && isSchemaError(ordersErr)) throw ordersErr;
 
-      const matched = data?.filter((row) => isProductMatch(row.product, product.name)) || [];
+      const matchedOrders = sampleOrdersData?.filter((row) => isProductMatch(row.product, product.name)) || [];
 
-      const mappedSamples: DbSample[] = matched.map((row) => ({
+      const mappedSamples: DbSample[] = matchedOrders.map((row) => ({
         id: row.id,
         productId,
         image: getProductImage(product.name, null),
         imageAlt: `${row.product} Sample`,
         name: `${row.product} Sample`,
         sampleType: 'Pre-Production',
-        supplier: row.buyer_name || 'Verified Supplier',
+        supplier: row.supplier || 'Verified Supplier',
         stage: row.status || 'Pending',
-        requested: formatDate(row.requested_at),
-        completion: row.delivered_at || 'Pending',
+        requested: formatDate(row.created_at),
+        completion: row.status === 'completed' || row.status === 'delivered' ? formatDate(row.updated_at) : 'Pending',
         isReference: false,
         creator: 'Buyer',
       }));
 
-      // Fetch forwarded sample quotes
-      let receivedQuotes: any[] = [];
+      // Fetch parent RFQ for this product
       const { data: rfqs, error: rfqErr } = await supabase
         .from('rfqs')
         .select('*')
@@ -889,29 +884,41 @@ export const sampleService = {
       if (rfqErr && isSchemaError(rfqErr)) throw rfqErr;
 
       const matchedRfq = rfqs?.find((r) => isProductMatch(r.product, product.name));
+      let receivedQuotes: any[] = [];
+
       if (matchedRfq) {
-        const { data: quotes, error: quoteErr } = await supabase
-          .from('quotes')
+        // Fetch matching sample RFQs created by admin
+        const { data: sampleRfqs, error: sRfqErr } = await supabase
+          .from('sample_rfqs')
           .select('*')
-          .eq('rfq_id', matchedRfq.id)
-          .eq('quote_type', 'sample')
-          .eq('is_forwarded', true);
+          .eq('parent_rfq_id', matchedRfq.id);
+        
+        if (sRfqErr && isSchemaError(sRfqErr)) throw sRfqErr;
 
-        if (quoteErr && isSchemaError(quoteErr)) throw quoteErr;
+        const sampleRfqIds = sampleRfqs?.map((s) => s.id) || [];
+        if (sampleRfqIds.length > 0) {
+          const { data: quotes, error: quoteErr } = await supabase
+            .from('sample_quotes')
+            .select('*')
+            .in('sample_rfq_id', sampleRfqIds)
+            .eq('is_forwarded', true);
 
-        receivedQuotes = (quotes || []).map((q) => ({
-          id: q.id,
-          rfqId: q.rfq_id,
-          supplierName: q.supplier_name,
-          supplierId: q.supplier_id,
-          unitPrice: q.supplier_unit_price || q.unit_price,
-          moq: q.moq || 1,
-          leadTimeDays: q.lead_time_days || q.days || 7,
-          paymentTerms: q.payment_terms || 'Net 30',
-          notes: q.notes,
-          validUntil: q.valid_until,
-          status: q.status,
-        }));
+          if (quoteErr && isSchemaError(quoteErr)) throw quoteErr;
+
+          receivedQuotes = (quotes || []).map((q) => ({
+            id: q.id,
+            rfqId: q.sample_rfq_id,
+            supplierName: q.supplier_name,
+            supplierId: q.supplier_id,
+            unitPrice: q.unit_price,
+            moq: q.sample_qty || 1,
+            leadTimeDays: q.lead_time_days || 7,
+            paymentTerms: q.payment_terms || 'Net 30',
+            notes: q.notes,
+            validUntil: q.valid_until,
+            status: q.status,
+          }));
+        }
       }
 
       return {

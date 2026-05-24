@@ -838,3 +838,115 @@ export async function markBuyerMessageRead(messageId: string) {
   if (!supabase) return;
   await supabase.from('messages').update({ read: true }).eq('id', messageId);
 }
+
+export async function placeSampleOrders(quoteIds: string[], rfqId: string) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('No Supabase client');
+  const userId = await requireUserId();
+
+  // Fetch RFQ data
+  const { data: rfq } = await supabase.from('rfqs').select('*').eq('id', rfqId).single();
+  if (!rfq) throw new Error('RFQ not found');
+
+  // Resolve buyer profile
+  let buyerName = rfq.buyer || 'Enterprise Buyer';
+  let buyerLogo = 'EB';
+  try {
+    const { data: profile } = await supabase
+      .from('buyer_profiles')
+      .select('organization_name, legal_name')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profile?.organization_name) {
+      buyerName = profile.organization_name;
+      buyerLogo = profile.organization_name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase();
+    } else if (profile?.legal_name) {
+      buyerName = profile.legal_name;
+      buyerLogo = profile.legal_name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase();
+    }
+  } catch (e) {
+    console.error('Error fetching buyer profile:', e);
+  }
+
+  const results = [];
+  for (const quoteId of quoteIds) {
+    // Update Quote status to order_placed
+    await supabase.from('sample_quotes').update({ status: 'order_placed' }).eq('id', quoteId);
+
+    // Fetch Quote data
+    const { data: quote } = await supabase.from('sample_quotes').select('*').eq('id', quoteId).single();
+    if (!quote) continue;
+
+    const sampleOrderId = `SO-${Date.now().toString(36).toUpperCase()}-${quoteId.slice(-4)}`;
+    const { error: sampleErr } = await supabase.from('sample_orders').insert({
+      id: sampleOrderId,
+      sample_rfq_id: quote.sample_rfq_id,
+      sample_quote_id: quote.id,
+      parent_rfq_id: rfqId,
+      product: rfq.product,
+      buyer: buyerName,
+      supplier: quote.supplier_name || 'Verified Supplier',
+      supplier_id: quote.supplier_id,
+      quantity: `${quote.sample_qty || 1} samples`,
+      status: 'confirmed'
+    });
+    if (sampleErr) throw sampleErr;
+
+    // Notify admin
+    await supabase.from('notifications').insert({
+      target_dashboard: 'admin',
+      type: 'sample_order_placed',
+      title: `Sample Order Placed: ${rfq.product}`,
+      message: `${buyerName} placed sample order ${sampleOrderId} with ${quote.supplier_name}.`,
+      action_url: `/sample-management`,
+      read: false
+    });
+
+    // Notify supplier
+    await supabase.from('notifications').insert({
+      target_dashboard: 'supplier',
+      type: 'sample_order_placed',
+      title: `Your Sample Quote Accepted`,
+      message: `Buyer accepted your quote for ${rfq.product}! Order ${sampleOrderId} is confirmed.`,
+      read: false
+    });
+
+    results.push(sampleOrderId);
+  }
+
+  // Update RFQ status to converted or sample_quoted
+  await supabase.from('rfqs').update({ status: 'converted' }).eq('id', rfqId).eq('buyer_id', userId);
+
+  return results;
+}
+
+export async function fetchSampleStages(sampleOrderId: string) {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('sample_stages')
+    .select('*')
+    .eq('sample_order_id', sampleOrderId)
+    .order('updated_at', { ascending: true });
+  if (error) {
+    console.error('fetchSampleStages error:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function fetchSampleDocuments(sampleOrderId: string) {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('sample_documents')
+    .select('*')
+    .eq('sample_order_id', sampleOrderId)
+    .order('uploaded_at', { ascending: true });
+  if (error) {
+    console.error('fetchSampleDocuments error:', error);
+    return [];
+  }
+  return data || [];
+}

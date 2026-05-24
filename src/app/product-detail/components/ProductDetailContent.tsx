@@ -179,6 +179,32 @@ export default function ProductDetailContent() {
           setDbFiles(files);
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sample_quotes' },
+        async () => {
+          const samples = await sampleService.getByProductId(productId);
+          setDbSamples(samples);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sample_stages' },
+        async () => {
+          const samples = await sampleService.getByProductId(productId);
+          setDbSamples(samples);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sample_documents' },
+        async () => {
+          const samples = await sampleService.getByProductId(productId);
+          setDbSamples(samples);
+          const files = await fileService.getByProductId(productId);
+          setDbFiles(files);
+        }
+      )
       .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, async () => {
         const files = await fileService.getByProductId(productId);
         setDbFiles(files);
