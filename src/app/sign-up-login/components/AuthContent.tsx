@@ -143,7 +143,7 @@ export default function AuthContent() {
       {/* Left brand panel */}
       <div
         className="hidden lg:flex lg:w-[45%] xl:w-[40%] flex-col justify-between p-10 relative overflow-hidden bg-cover bg-center"
-        style={{ backgroundImage: "url('/assets/images/login-bg.jpg')" }}
+        style={{ backgroundImage: "url('/assets/images/login-bg.png')" }}
       >
         {/* Sleek dark gradient overlay for text readability and cinematic depth */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/35 to-black/80 z-0" />
