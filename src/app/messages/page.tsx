@@ -2,15 +2,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import {
+  fetchOrCreateBuyerConversation,
+  fetchBuyerChatMessages,
+  sendBuyerChatMessage,
+  markBuyerChatRead,
   fetchBuyerMessages,
-  sendBuyerMessage,
-  markBuyerMessageRead,
 } from '@/lib/services/procurementApi';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
-import { MessageCircle, Send, Inbox, PenSquare, Clock } from 'lucide-react';
+import { MessageCircle, Send, Inbox, Shield, Clock, ChevronDown, Archive } from 'lucide-react';
 
-interface Message {
+interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  from_admin: boolean;
+  text: string;
+  sent_at: string;
+  read: boolean;
+}
+
+interface LegacyMessage {
   id: string;
   orderId?: string;
   from: string;
@@ -21,6 +32,18 @@ interface Message {
   type: string;
   read: boolean;
   createdAt?: string;
+}
+
+interface Conversation {
+  id: string;
+  buyer_id: string;
+  buyer_name: string;
+  buyer_avatar: string;
+  last_message: string;
+  last_message_at: string;
+  unread_admin: number;
+  unread_buyer: number;
+  online: boolean;
 }
 
 const QUICK_TEMPLATES = [
@@ -43,95 +66,109 @@ const QUICK_TEMPLATES = [
 ];
 
 export default function MessagesPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [legacyMessages, setLegacyMessages] = useState<LegacyMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [composing, setComposing] = useState(false);
   const [reply, setReply] = useState('');
-  const [newSubject, setNewSubject] = useState('');
-  const [newBody, setNewBody] = useState('');
-  const [newOrderId, setNewOrderId] = useState('');
   const [sending, setSending] = useState(false);
-  const replyRef = useRef<HTMLTextAreaElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Load initial conversation and legacy messages
   useEffect(() => {
-    loadMessages();
+    async function init() {
+      try {
+        setLoading(true);
+        const conv = await fetchOrCreateBuyerConversation();
+        setConversation(conv);
+
+        const [msgs, legacy] = await Promise.all([
+          fetchBuyerChatMessages(conv.id),
+          fetchBuyerMessages(),
+        ]);
+        setChatMessages(msgs);
+        setLegacyMessages(legacy);
+
+        await markBuyerChatRead(conv.id);
+      } catch (err) {
+        console.error('Failed to initialize chat:', err);
+        toast.error('Failed to connect to chat service');
+      } finally {
+        setLoading(false);
+      }
+    }
+    init();
+  }, []);
+
+  // Real-time listener for new messages
+  useEffect(() => {
+    if (!conversation) return;
 
     const supabase = createClient();
     if (!supabase) return;
 
     const channel = supabase
-      .channel('buyer-messages-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, async () => {
-        const data = await fetchBuyerMessages();
-        setMessages(data);
-      })
+      .channel('buyer-live-messages-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'buyer_messages',
+          filter: `conversation_id=eq.${conversation.id}`,
+        },
+        async (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newMsg = payload.new as ChatMessage;
+            setChatMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+            await markBuyerChatRead(conversation.id);
+            // Refresh conversation unread count locally
+            setConversation((prev) => prev ? { ...prev, unread_buyer: 0 } : null);
+          }
+        }
+      )
+      .subscribe();
+
+    // Listener for conversation updates (updates list preview)
+    const convChannel = supabase
+      .channel('buyer-live-convs-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'buyer_conversations',
+          filter: `id=eq.${conversation.id}`,
+        },
+        (payload) => {
+          setConversation(payload.new as Conversation);
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(convChannel);
     };
-  }, []);
+  }, [conversation]);
 
-  const loadMessages = async () => {
-    setLoading(true);
-    const data = await fetchBuyerMessages();
-    setMessages(data);
-    setLoading(false);
-  };
+  // Scroll to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
 
-  const selectedMsg = messages.find((m) => m.id === selected);
-  const unread = messages.filter((m) => !m.read).length;
-
-  const handleSelect = async (id: string) => {
-    setSelected(id);
-    setComposing(false);
-    const msg = messages.find((m) => m.id === id);
-    if (msg && !msg.read) {
-      await markBuyerMessageRead(id);
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, read: true } : m)));
-    }
-  };
-
-  const handleReply = async () => {
-    if (!reply.trim() || !selectedMsg) return;
+  const handleSend = async () => {
+    if (!reply.trim() || !conversation) return;
     setSending(true);
     try {
-      await sendBuyerMessage({
-        orderId: selectedMsg.orderId,
-        subject: selectedMsg.subject.startsWith('Re:')
-          ? selectedMsg.subject
-          : `Re: ${selectedMsg.subject}`,
-        text: reply,
-      });
-      toast.success('Reply sent to Admin');
+      await sendBuyerChatMessage(conversation.id, reply);
       setReply('');
-      loadMessages();
-    } catch {
-      toast.error('Failed to send reply');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleNew = async () => {
-    if (!newSubject.trim() || !newBody.trim()) {
-      toast.error('Subject and message are required');
-      return;
-    }
-    setSending(true);
-    try {
-      await sendBuyerMessage({
-        orderId: newOrderId || undefined,
-        subject: newSubject,
-        text: newBody,
-      });
-      toast.success('Message sent to Admin');
-      setComposing(false);
-      setNewSubject('');
-      setNewBody('');
-      setNewOrderId('');
-      loadMessages();
+      // Reload messages to ensure synchronization
+      const msgs = await fetchBuyerChatMessages(conversation.id);
+      setChatMessages(msgs);
     } catch {
       toast.error('Failed to send message');
     } finally {
@@ -139,250 +176,225 @@ export default function MessagesPage() {
     }
   };
 
+  const unreadCount = conversation?.unread_buyer || 0;
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-1">
-              Communication
-            </p>
-            <h1 className="text-2xl font-bold text-[var(--foreground)] flex items-center gap-2">
-              <MessageCircle size={22} className="text-primary" />
-              Messages
-            </h1>
-            <p className="text-sm text-[var(--muted-foreground)] mt-1">
-              All communication goes through Admin — {unread} unread
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setComposing(true);
-              setSelected(null);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            <PenSquare size={15} /> New Message
-          </button>
+        <div className="mb-6">
+          <p className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-1">
+            Communication Center
+          </p>
+          <h1 className="text-2xl font-bold text-[var(--foreground)] flex items-center gap-2">
+            <MessageCircle size={22} className="text-primary" />
+            Live Chat Support
+          </h1>
+          <p className="text-sm text-[var(--muted-foreground)] mt-1">
+            Secure, real-time channel directly with the Proquoment Admin team
+          </p>
         </div>
 
         <div className="flex gap-4" style={{ height: 'calc(100vh - 220px)', minHeight: 500 }}>
-          {/* Left: Message List */}
+          
+          {/* Left Panel: Conversation Selector */}
           <div className="w-80 flex-shrink-0 bg-white border border-[var(--border)] rounded-2xl overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b border-[var(--border)] flex items-center gap-2">
+            <div className="px-4 py-3 border-b border-[var(--border)] flex items-center gap-2 bg-gray-50">
               <Inbox size={15} className="text-[var(--muted-foreground)]" />
-              <span className="text-sm font-semibold">Inbox</span>
-              {unread > 0 && (
-                <span className="ml-auto px-2 py-0.5 bg-primary text-white text-[10px] font-bold rounded-full">
-                  {unread}
-                </span>
-              )}
+              <span className="text-sm font-semibold text-[var(--foreground)]">Support Channels</span>
             </div>
+            
             <div className="flex-1 overflow-y-auto">
               {loading ? (
                 <div className="flex items-center justify-center h-40 text-[var(--muted-foreground)] text-sm">
-                  Loading…
+                  Connecting to server...
                 </div>
-              ) : messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 text-[var(--muted-foreground)]">
+              ) : !conversation ? (
+                <div className="flex flex-col items-center justify-center h-40 text-[var(--muted-foreground)] px-4 text-center">
                   <Inbox size={32} className="mb-2 opacity-30" />
-                  <p className="text-sm">No messages yet</p>
+                  <p className="text-sm">Unable to load support channel</p>
                 </div>
               ) : (
-                messages.map((msg) => (
-                  <button
-                    key={msg.id}
-                    onClick={() => handleSelect(msg.id)}
-                    className={`w-full text-left px-4 py-3 border-b border-[var(--border)] transition-colors ${
-                      selected === msg.id
-                        ? 'bg-blue-50 border-l-2 border-l-primary'
-                        : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span
-                        className={`text-xs font-semibold ${msg.read ? 'text-[var(--muted-foreground)]' : 'text-[var(--foreground)]'}`}
-                      >
-                        {msg.from === 'Admin' ? '🔵 Admin' : '↗ You'}
+                <button
+                  className="w-full text-left px-4 py-4 border-b border-[var(--border)] transition-colors bg-blue-50/70 border-l-4 border-l-primary flex gap-3"
+                >
+                  <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
+                    PA
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-semibold text-[var(--foreground)]">Proquoment Admin</span>
+                      <span className="text-[10px] text-[var(--muted-foreground)]">
+                        {conversation.last_message_at
+                          ? new Date(conversation.last_message_at).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}
                       </span>
-                      <span className="text-[10px] text-[var(--muted-foreground)]">{msg.time}</span>
                     </div>
-                    <p
-                      className={`text-xs truncate mb-0.5 ${msg.read ? 'font-normal text-[var(--muted-foreground)]' : 'font-bold text-[var(--foreground)]'}`}
-                    >
-                      {msg.subject}
+                    <p className="text-xs text-[var(--muted-foreground)] truncate">
+                      {conversation.last_message || 'No messages yet'}
                     </p>
-                    <p className="text-[10px] text-[var(--muted-foreground)] truncate">
-                      {msg.text}
-                    </p>
-                    {!msg.read && (
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1" />
+                    {unreadCount > 0 && (
+                      <span className="inline-block px-1.5 py-0.5 bg-primary text-white text-[9px] font-bold rounded-full mt-1">
+                        {unreadCount} new
+                      </span>
                     )}
-                  </button>
-                ))
+                  </div>
+                </button>
               )}
             </div>
           </div>
 
-          {/* Right: Detail / Compose */}
+          {/* Right Panel: Chat Area */}
           <div className="flex-1 bg-white border border-[var(--border)] rounded-2xl overflow-hidden flex flex-col">
-            {composing ? (
+            {loading ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-[var(--muted-foreground)]">
+                <MessageCircle size={48} className="mb-3 opacity-20 animate-pulse" />
+                <p className="text-sm">Loading Chat Workspace...</p>
+              </div>
+            ) : conversation ? (
               <>
-                <div className="px-6 py-4 border-b border-[var(--border)] flex items-center gap-2">
-                  <PenSquare size={16} className="text-primary" />
-                  <span className="font-semibold text-sm">New Message to Admin</span>
-                </div>
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--muted-foreground)] uppercase mb-1">
-                      Subject
-                    </label>
-                    <input
-                      value={newSubject}
-                      onChange={(e) => setNewSubject(e.target.value)}
-                      placeholder="e.g. Update on Order ORD-12345"
-                      className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--muted-foreground)] uppercase mb-1">
-                      Linked Order ID (optional)
-                    </label>
-                    <input
-                      value={newOrderId}
-                      onChange={(e) => setNewOrderId(e.target.value)}
-                      placeholder="e.g. ORD-12345"
-                      className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--muted-foreground)] uppercase mb-2">
-                      Quick Templates
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {QUICK_TEMPLATES.map((t) => (
-                        <button
-                          key={t.label}
-                          onClick={() => setNewBody(t.text)}
-                          className="px-2 py-1 text-[10px] font-semibold border border-[var(--border)] rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          {t.label}
-                        </button>
-                      ))}
+                {/* Chat Workspace Header */}
+                <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between bg-gray-50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm">
+                      PA
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-sm text-[var(--foreground)] flex items-center gap-2">
+                        Proquoment Admin
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-ping inline-block" />
+                      </h2>
+                      <p className="text-[11px] text-[var(--muted-foreground)]">Verified Support Team</p>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--muted-foreground)] uppercase mb-1">
-                      Message
-                    </label>
-                    <textarea
-                      value={newBody}
-                      onChange={(e) => setNewBody(e.target.value)}
-                      rows={8}
-                      placeholder="Type your message here…"
-                      className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                    />
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-100 rounded-full text-blue-700 text-xs font-medium">
+                    <Shield size={12} />
+                    <span>Real-time Protected Route</span>
                   </div>
                 </div>
-                <div className="px-6 py-4 border-t border-[var(--border)] flex items-center justify-between">
-                  <button
-                    onClick={() => setComposing(false)}
-                    className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleNew}
-                    disabled={sending}
-                    className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-                  >
-                    <Send size={14} /> {sending ? 'Sending…' : 'Send to Admin'}
-                  </button>
-                </div>
-              </>
-            ) : selectedMsg ? (
-              <>
-                {/* Message Detail */}
-                <div className="px-6 py-4 border-b border-[var(--border)]">
-                  <h2 className="font-bold text-[var(--foreground)] mb-1">{selectedMsg.subject}</h2>
-                  <div className="flex items-center gap-4 text-xs text-[var(--muted-foreground)]">
-                    <span>
-                      From: <strong>{selectedMsg.from === 'Admin' ? '🔵 Admin' : 'You'}</strong>
-                    </span>
-                    <span>
-                      To: <strong>{selectedMsg.to === 'Admin' ? '🔵 Admin' : 'You'}</strong>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock size={10} /> {selectedMsg.time}
-                    </span>
-                    {selectedMsg.orderId && (
-                      <span className="px-2 py-0.5 bg-gray-100 rounded font-mono text-[10px]">
-                        {selectedMsg.orderId}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                  <p className="text-sm leading-relaxed text-[var(--foreground)] whitespace-pre-wrap">
-                    {selectedMsg.text}
-                  </p>
-                  {selectedMsg.from === 'Admin' && (
-                    <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                      <p className="text-[10px] font-semibold text-blue-600 uppercase mb-1">Note</p>
-                      <p className="text-xs text-blue-700">
-                        This message was sent by the Proquoment Admin team. All replies go directly
-                        to Admin.
+
+                {/* Messages Thread */}
+                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-slate-50/50">
+                  {chatMessages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-[var(--muted-foreground)]">
+                      <MessageCircle size={40} className="mb-2 opacity-20" />
+                      <p className="text-sm font-medium">Start your conversation with Proquoment Admin</p>
+                      <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                        Send a message below to connect with our operations team.
                       </p>
                     </div>
+                  ) : (
+                    chatMessages.map((msg) => {
+                      const fromAdmin = msg.from_admin;
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col ${fromAdmin ? 'items-start' : 'items-end'}`}
+                        >
+                          <div
+                            className={`max-w-[70%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                              fromAdmin
+                                ? 'bg-white text-[var(--foreground)] rounded-tl-none border border-[var(--border)]'
+                                : 'bg-primary text-white rounded-tr-none'
+                            }`}
+                          >
+                            {msg.text}
+                          </div>
+                          <span className="text-[10px] text-[var(--muted-foreground)] mt-1.5 px-1.5 flex items-center gap-1">
+                            <Clock size={10} />
+                            {msg.sent_at
+                              ? new Date(msg.sent_at).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : ''}
+                          </span>
+                        </div>
+                      );
+                    })
                   )}
+                  <div ref={chatEndRef} />
                 </div>
-                {/* Reply Box */}
-                <div className="px-6 py-4 border-t border-[var(--border)]">
+
+                {/* Past Email Archive (Collapsible details block) */}
+                {legacyMessages.length > 0 && (
+                  <div className="border-t border-[var(--border)] px-6 py-3 bg-gray-50/80">
+                    <details className="group">
+                      <summary className="cursor-pointer flex items-center justify-between text-xs font-semibold text-[var(--muted-foreground)] select-none list-none group-open:mb-3">
+                        <div className="flex items-center gap-1.5">
+                          <Archive size={13} />
+                          <span>Past Email Message History ({legacyMessages.length})</span>
+                        </div>
+                        <ChevronDown size={13} className="transition-transform group-open:rotate-180" />
+                      </summary>
+                      
+                      <div className="space-y-2.5 max-h-40 overflow-y-auto pr-1">
+                        {legacyMessages.map((email) => (
+                          <div
+                            key={email.id}
+                            className="p-3 bg-white border border-[var(--border)] rounded-xl text-xs"
+                          >
+                            <div className="flex justify-between items-center font-bold mb-1 text-[var(--foreground)]">
+                              <span>Subject: {email.subject}</span>
+                              <span className="text-[10px] text-[var(--muted-foreground)] font-normal flex items-center gap-1">
+                                <Clock size={8} /> {email.time}
+                              </span>
+                            </div>
+                            <p className="text-[var(--muted-foreground)] leading-relaxed whitespace-pre-wrap">
+                              {email.text}
+                            </p>
+                            {email.orderId && (
+                              <span className="inline-block mt-1.5 px-2 py-0.5 bg-gray-100 rounded text-[9px] font-mono text-[var(--muted-foreground)]">
+                                Order Ref: {email.orderId}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                )}
+
+                {/* Input Workspace */}
+                <div className="px-6 py-4 border-t border-[var(--border)] bg-white">
                   <div className="mb-3 flex flex-wrap gap-2">
                     {QUICK_TEMPLATES.map((t) => (
                       <button
                         key={t.label}
-                        onClick={() => {
-                          setReply(t.text);
-                          replyRef.current?.focus();
-                        }}
-                        className="px-2 py-1 text-[10px] font-semibold border border-[var(--border)] rounded-lg hover:bg-gray-50 transition-colors"
+                        onClick={() => setReply(t.text)}
+                        className="px-2.5 py-1 text-[10px] font-semibold border border-[var(--border)] rounded-full hover:bg-gray-50 transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)] bg-white"
                       >
                         {t.label}
                       </button>
                     ))}
                   </div>
                   <div className="flex gap-3">
-                    <textarea
-                      ref={replyRef}
+                    <input
                       value={reply}
                       onChange={(e) => setReply(e.target.value)}
-                      placeholder="Type your reply to Admin…"
-                      rows={3}
-                      className="flex-1 border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                      placeholder="Type your message to Admin..."
+                      className="flex-1 border border-[var(--border)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleReply();
+                        if (e.key === 'Enter') handleSend();
                       }}
                     />
                     <button
-                      onClick={handleReply}
+                      onClick={handleSend}
                       disabled={sending || !reply.trim()}
-                      className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 self-end"
+                      className="flex items-center justify-center w-11 h-11 bg-primary text-white rounded-xl hover:bg-primary/95 transition-colors disabled:opacity-50 flex-shrink-0"
                     >
-                      <Send size={14} /> {sending ? '…' : 'Reply'}
+                      <Send size={16} />
                     </button>
                   </div>
-                  <p className="text-[10px] text-[var(--muted-foreground)] mt-1">
-                    Ctrl+Enter to send
-                  </p>
                 </div>
               </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-[var(--muted-foreground)]">
                 <MessageCircle size={48} className="mb-3 opacity-20" />
-                <p className="text-sm font-medium">Select a message or compose new</p>
-                <p className="text-xs mt-1">All messages are routed through Admin</p>
+                <p className="text-sm font-medium">Channel Unavailable</p>
               </div>
             )}
           </div>

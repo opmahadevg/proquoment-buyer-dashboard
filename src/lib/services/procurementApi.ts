@@ -950,3 +950,127 @@ export async function fetchSampleDocuments(sampleOrderId: string) {
   }
   return data || [];
 }
+
+// ─────────────────────────────────────────────────────────────
+// BUYER LIVE CHAT FUNCTIONS
+// ─────────────────────────────────────────────────────────────
+
+export async function fetchOrCreateBuyerConversation() {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('No Supabase client');
+  const userId = await requireUserId();
+
+  // Try to fetch existing
+  const { data: existing, error: fetchErr } = await supabase
+    .from('buyer_conversations')
+    .select('*')
+    .eq('buyer_id', userId)
+    .maybeSingle();
+
+  if (fetchErr) throw fetchErr;
+  if (existing) return existing;
+
+  // Otherwise, create one. Let's find organization_name from profiles
+  const { data: profile } = await supabase
+    .from('buyer_profiles')
+    .select('organization_name, legal_name')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const emailName = user?.email?.split('@')[0] || 'Enterprise Buyer';
+  const orgName = profile?.organization_name || profile?.legal_name || emailName;
+
+  const avatar = orgName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+
+  const { data: newConv, error: createErr } = await supabase
+    .from('buyer_conversations')
+    .insert({
+      buyer_id: userId,
+      buyer_name: orgName,
+      buyer_avatar: avatar,
+      last_message: 'Conversation started',
+      last_message_at: new Date().toISOString(),
+      unread_admin: 0,
+      unread_buyer: 0,
+      online: true
+    })
+    .select('*')
+    .single();
+
+  if (createErr) throw createErr;
+  return newConv;
+}
+
+export async function fetchBuyerChatMessages(conversationId: string) {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('buyer_messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('sent_at', { ascending: true });
+  if (error) {
+    console.error('fetchBuyerChatMessages:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function sendBuyerChatMessage(conversationId: string, text: string) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('No Supabase client');
+
+  const { error: msgErr } = await supabase.from('buyer_messages').insert({
+    conversation_id: conversationId,
+    from_admin: false,
+    text: text,
+    sent_at: new Date().toISOString()
+  });
+  if (msgErr) throw msgErr;
+
+  // Query existing unread_admin first to increment it
+  const { data: conv } = await supabase
+    .from('buyer_conversations')
+    .select('unread_admin, buyer_name')
+    .eq('id', conversationId)
+    .single();
+
+  const nextUnreadAdmin = (conv?.unread_admin || 0) + 1;
+
+  const { error: convErr } = await supabase
+    .from('buyer_conversations')
+    .update({
+      last_message: text,
+      last_message_at: new Date().toISOString(),
+      unread_admin: nextUnreadAdmin
+    })
+    .eq('id', conversationId);
+  if (convErr) throw convErr;
+
+  // Notify admin
+  try {
+    const fromName = conv?.buyer_name || 'Buyer';
+    await supabase.from('notifications').insert({
+      target_dashboard: 'admin',
+      type: 'message_received',
+      title: `New Message from ${fromName}`,
+      message: text.slice(0, 100),
+      action_url: '/communications',
+      read: false
+    });
+  } catch (notifErr) {
+    console.error('Failed to create admin notification:', notifErr);
+  }
+}
+
+export async function markBuyerChatRead(conversationId: string) {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from('buyer_conversations')
+    .update({ unread_buyer: 0 })
+    .eq('id', conversationId);
+  if (error) console.error('markBuyerChatRead:', error);
+}
+
