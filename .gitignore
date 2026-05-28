@@ -42,3 +42,7 @@ jest-test-results.json
 
 # Optional: if using TurboRepo or monorepo
 turbo/
+
+# Sentry auth token (never commit)
+.env.sentry-build-plugin
+.sentryclirc
