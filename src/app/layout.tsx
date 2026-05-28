@@ -6,6 +6,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { Analytics } from '@vercel/analytics/next';
 import { PostHogProvider } from './providers';
+import { ProquomentFooter } from './components/ProquomentFooter';
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <NotificationProvider>{children}</NotificationProvider>
           </AuthProvider>
         </PostHogProvider>
+        <ProquomentFooter />
         <Analytics />
       </body>
     </html>
