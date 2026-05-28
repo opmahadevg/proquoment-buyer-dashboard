@@ -1,0 +1,25 @@
+# Proquoment Buyer Dashboard
+
+> The Buyer Dashboard at buyer.proquoment.in is the sourcing workspace for international importers using Proquoment — an AI-powered B2B enabled procurement system helps global buyers to source from verified manufacturers.
+
+Built with Next.js, Supabase realtime, and Sentry error monitoring.
+
+## Pages
+
+- [Home](https://buyer.proquoment.in/): Dashboard overview
+- [Submit RFQ](https://buyer.proquoment.in/rfq): Submit sourcing requirements
+- [Quotes](https://buyer.proquoment.in/quotes): View and compare supplier quotes
+- [Orders](https://buyer.proquoment.in/orders): Track purchase orders and samples
+- [Shipments](https://buyer.proquoment.in/shipments): Monitor freight and delivery
+- [Products List](https://buyer.proquoment.in/products-list): Browse manufacturer catalog
+- [Product Detail](https://buyer.proquoment.in/product-detail): View product specs and MOQ
+- [New Product Request](https://buyer.proquoment.in/new-product): Request new sourcing categories
+- [Messages](https://buyer.proquoment.in/messages): Chat with suppliers and admin
+- [Organization](https://buyer.proquoment.in/organization): Company profile and team
+- [Account](https://buyer.proquoment.in/account): Account settings
+
+## Related
+
+- [Proquoment Platform](https://proquoment.in)
+- [Supplier Quotation Dashboard](https://supplier.proquoment.in)
+- [Contact Proquoment](https://proquoment.in/contact)
