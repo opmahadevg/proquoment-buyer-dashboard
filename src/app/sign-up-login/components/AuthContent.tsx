@@ -30,6 +30,7 @@ export default function AuthContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [forgotSent, setForgotSent] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
   const { signIn, signUp } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -345,41 +346,53 @@ export default function AuthContent() {
                 </p>
               </form>
 
-              {/* Demo accounts */}
+              {/* Request Demo */}
               <div className="mt-6">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="flex-1 h-px bg-[var(--border)]" />
-                  <span className="text-xs text-[var(--muted-foreground)] font-medium">
-                    Demo accounts
-                  </span>
+                  <span className="text-xs text-[var(--muted-foreground)] font-medium">or</span>
                   <div className="flex-1 h-px bg-[var(--border)]" />
                 </div>
-                <div className="space-y-2">
-                  {[
-                    { label: 'Demo User', email: 'demo@proquoment.com', password: 'Demo@1234' },
-                    { label: 'Buyer', email: 'buyer@proquoment.com', password: 'Buyer@1234' },
-                  ].map((account) => (
-                    <button
-                      key={account.email}
-                      type="button"
-                      onClick={() => {
-                        loginForm.setValue('email', account.email);
-                        loginForm.setValue('password', account.password);
-                      }}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 hover:bg-[var(--muted)] hover:border-primary/40 transition-all group"
-                    >
-                      <div className="text-left">
-                        <p className="text-xs font-semibold text-[var(--foreground)]">
-                          {account.label}
-                        </p>
-                        <p className="text-xs text-[var(--muted-foreground)]">{account.email}</p>
-                      </div>
-                      <span className="text-xs text-primary font-medium group-hover:underline">
-                        Use →
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDemo((v) => !v)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 hover:bg-[var(--muted)]/60 hover:border-primary/30 text-sm font-medium text-[var(--foreground)] transition-all"
+                >
+                  <span className="text-base leading-none">🎮</span>
+                  {showDemo ? 'Hide demo accounts' : 'Request Demo'}
+                </button>
+                {showDemo && (
+                  <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <p className="text-[11px] text-[var(--muted-foreground)] text-center mb-2">
+                      Click an account to auto-fill credentials
+                    </p>
+                    {[
+                      { label: 'Demo User', email: 'demo@proquoment.com', password: 'Demo@1234' },
+                      { label: 'Buyer', email: 'buyer@proquoment.com', password: 'Buyer@1234' },
+                    ].map((account) => (
+                      <button
+                        key={account.email}
+                        type="button"
+                        onClick={() => {
+                          loginForm.setValue('email', account.email);
+                          loginForm.setValue('password', account.password);
+                          setShowDemo(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 hover:bg-[var(--muted)] hover:border-primary/40 transition-all group"
+                      >
+                        <div className="text-left">
+                          <p className="text-xs font-semibold text-[var(--foreground)]">
+                            {account.label}
+                          </p>
+                          <p className="text-xs text-[var(--muted-foreground)]">{account.email}</p>
+                        </div>
+                        <span className="text-xs text-primary font-medium group-hover:underline">
+                          Use →
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}
