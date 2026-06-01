@@ -38,6 +38,7 @@ interface Message {
   role: 'ai' | 'user';
   text: string;
   options?: string[];
+  multiSelect?: boolean; // Issue #8 — multi-select chip support
   isStreaming?: boolean;
 }
 
@@ -49,11 +50,13 @@ interface RFQData {
   moq: string;
   specifications: { label: string; value: string; pending?: boolean }[];
   manufacturingNotes: { label: string; value: string; pending?: boolean }[];
+  commercialTerms: { label: string; value: string; pending?: boolean }[]; // Issue #5 #6
   ambiguities: string[];
+  categoryRelevantFields: string[]; // Issue #2 — dynamic field filtering
 }
 
 // ─── System prompt for conversational text (NO JSON) ─────────────────────────
-const CHAT_SYSTEM_PROMPT = `You are a precision procurement RFQ agent for Proquoment, a B2B sourcing platform. Help the buyer build a complete, manufacturer-ready RFQ through intelligent, focused questions.
+const CHAT_SYSTEM_PROMPT = `You are a precision procurement RFQ agent for Proquoment, a B2B international sourcing platform. Help the buyer build a complete, manufacturer-ready RFQ through intelligent, focused questions.
 
 RESPONSE FORMAT — follow this structure exactly every time:
 1. One short sentence confirming or acknowledging the last answer (skip on first message).
@@ -62,43 +65,57 @@ RESPONSE FORMAT — follow this structure exactly every time:
    • **Option Name** – brief explanation or example with real numbers/units
    • **Option Name** – brief explanation or example with real numbers/units
 4. Optional: 💡 One concise tip about cost, quality, or certification impact.
-5. REQUIRED final line: OPTIONS: option1, option2, option3, option4
+5. REQUIRED final line using PIPE delimiter: OPTIONS: option1 | option2 | option3 | option4
+   For multi-value fields (certifications, documents): OPTIONS[multi]: opt1 | opt2 | opt3 | opt4
 
 BEHAVIOR:
 - Read the product description carefully. Skip any spec already provided.
 - Ask ONE question per turn. Every option must include real numbers (mm, g/m², units, $, days).
-- Cover in this priority order (skip if already known):
-  a. Exact dimensions — L × W × H in mm/cm, or diameter × height
-  b. MOQ — minimum order quantity in units
-  c. Target price per unit (USD)
-  d. Material grade/weight — e.g. 300 g/m², 0.8 mm steel, food-grade PP
-  e. Colorways — number of Pantone/RAL colors or print type
-  f. Packaging — units per carton, poly bag or box
-  g. Manufacturing tolerance — ±mm
-  h. Lead time — days from purchase order
-  i. Required certifications — CE, FDA, OEKO-TEX, RoHS, etc.
-- After 7–9 exchanges say: "Perfect, I have everything I need to build your RFQ." then:
-  OPTIONS: Yes, finalize RFQ, Add one more detail
+- ADAPT questions to product CATEGORY. For food/spice/agricultural products: skip Dimensions, Colorways, Surface Treatment/Coating. For textiles: skip food-safety certs. For electronics: skip food certs, add RoHS/CE.
+- Cover in this priority order (skip if already known OR irrelevant to category):
+  a. MOQ — minimum order quantity in units or kg
+  b. Target price per unit/kg (USD) — IMPORTANT: always write full price e.g. $1,500/kg NOT abbreviated
+  c. Material grade / quality standard — e.g. Grade A, ISO 3632-1, food-grade
+  d. Packaging — units per carton, bag type, inner/outer packaging
+  e. Lead time — days from purchase order
+  f. Required certifications — e.g. HACCP, Halal, ISO 22000, FDA (use OPTIONS[multi]: for this)
+  g. Incoterms — FOB, CIF, EXW, DDP
+  h. Payment terms — T/T advance %, L/C, D/P
+  i. Port of loading — city and country
+  j. Destination port — buyer's port
+  k. Sample requirements — quantity, cost, lead time
+  l. Required documents — COA, COO, Phytosanitary, etc. (use OPTIONS[multi]: for this)
+  m. Dimensions (L × W × H) — ONLY for physical goods where relevant
+  n. Surface Treatment / Coating — ONLY for manufactured/industrial products
+  o. Colorways / Finish — ONLY for consumer goods, textiles, ceramics
+- NEVER declare "I have everything I need" until ALL of the following are satisfied:
+  1. Core product specs for the category are ≥ 70% filled
+  2. At least ONE of the commercial terms (Incoterms, Payment Terms, Port of Loading) has been asked
+  If not ready, continue asking the next most important question.
+- When ready to finalize say: "Perfect, I have everything I need to build your RFQ." then:
+  OPTIONS: Yes, finalize RFQ | Add one more detail
 
 CRITICAL RULES:
 - NEVER output raw JSON or code blocks.
 - The OPTIONS: line is machine-parsed and NOT shown to the user — always include it.
+- ALWAYS use pipe symbol | to separate options — NEVER use comma as option separator.
 - Keep the confirmation sentence to 1 line max before the bold question.
 - Bold option names: **Name** — then dash and description.
 - Use realistic, product-specific numbers — never vague words like "small/medium/large" alone.
+- For price options: always write full prices e.g. "$1,500/kg" not "$1" or "1500".
 
-EXAMPLE (for a ceramic plate):
-Got it, high-fire stoneware it is.
+EXAMPLE (for saffron spice):
+Got it, Grade A ISO 3632-1 certified saffron.
 
-**What diameter and height do you need for the plate?**
-• **24 cm diameter, 2.5 cm height** – standard dinner plate, most common for retail
-• **26 cm diameter, 3 cm height** – slightly larger, popular for restaurants
-• **28 cm diameter, 3.5 cm height** – large format, premium presentation
-• **Custom dimensions** – specify in the box below
+**What is your target price range per kg?**
+• **$1,200/kg** – economy grade, suitable for bulk food processing
+• **$1,800/kg** – premium Grade A retail quality
+• **$2,500/kg** – super-negin premium, highest colour value ≥250 USP
+• **Custom price range** – type your target below
 
-💡 Diameter above 26 cm may increase kiln space requirements and unit cost by 10–15%.
+💡 ISO 3632-1 Grade A requires minimum crocin ≥170, picrocrocin ≥85, safranal ≥20.
 
-OPTIONS: 24 cm diameter, 26 cm diameter, 28 cm diameter, Custom / Type below`;
+OPTIONS: $1,200/kg | $1,800/kg | $2,500/kg | Custom / Type below`;
 
 // ─── System prompt for structured JSON extraction (NO conversational text) ───
 // Keep the last N history messages to avoid token-limit errors across all providers.
@@ -117,18 +134,18 @@ The JSON must have this exact structure:
   "productName": "string",
   "category": "string",
   "intendedUse": "string",
-  "description": "string",
+  "description": "string — IMPORTANT: Write a complete, professional, supplier-facing product brief synthesized from ALL information gathered in the conversation. Do NOT just echo the buyer's first message. Include product name, grade, quality standards, certifications, quantity, packaging requirements, and any other confirmed specs. Format as 2-3 sentences a supplier can act on.",
   "moq": "string",
   "specifications": [
-    { "label": "Dimensions (L × W × H)", "value": "string", "pending": boolean },
     { "label": "Materials / Grade", "value": "string", "pending": boolean },
-    { "label": "Unit Weight", "value": "string", "pending": boolean },
     { "label": "Target Unit Price", "value": "string", "pending": boolean },
-    { "label": "Colorways / Finish", "value": "string", "pending": boolean },
     { "label": "Packaging", "value": "string", "pending": boolean },
+    { "label": "Certifications / Standards", "value": "string", "pending": boolean },
+    { "label": "Dimensions (L × W × H)", "value": "string", "pending": boolean },
+    { "label": "Unit Weight", "value": "string", "pending": boolean },
+    { "label": "Colorways / Finish", "value": "string", "pending": boolean },
     { "label": "Branding / Labeling", "value": "string", "pending": boolean },
-    { "label": "Surface Treatment / Coating", "value": "string", "pending": boolean },
-    { "label": "Certifications / Standards", "value": "string", "pending": boolean }
+    { "label": "Surface Treatment / Coating", "value": "string", "pending": boolean }
   ],
   "manufacturingNotes": [
     { "label": "Production Process", "value": "string", "pending": boolean },
@@ -136,6 +153,15 @@ The JSON must have this exact structure:
     { "label": "Lead Time (days)", "value": "string", "pending": boolean },
     { "label": "Quality / Testing Requirements", "value": "string", "pending": boolean }
   ],
+  "commercialTerms": [
+    { "label": "Incoterms", "value": "string", "pending": boolean },
+    { "label": "Payment Terms", "value": "string", "pending": boolean },
+    { "label": "Port of Loading", "value": "string", "pending": boolean },
+    { "label": "Destination Port", "value": "string", "pending": boolean },
+    { "label": "Sample Requirements", "value": "string", "pending": boolean },
+    { "label": "Required Documents", "value": "string", "pending": boolean }
+  ],
+  "categoryRelevantFields": ["string — list ONLY the specification/note field labels that are relevant for this product category. For food/spice/agricultural products omit: Dimensions (L × W × H), Colorways / Finish, Surface Treatment / Coating, Branding / Labeling. For textiles include all except Surface Treatment. For industrial/electronics include all. If unsure, include all."],
   "ambiguities": ["string"],
   "options": ["string"]
 }
@@ -143,10 +169,11 @@ The JSON must have this exact structure:
 Rules:
 - Always include units in values: mm, cm, g, kg, g/m², days, USD, %, etc.
 - For numeric ranges confirmed by the buyer, write exactly what they said (e.g. "500–1,000 units", "30×20×10 cm", "±0.5 mm", "$5–$15/unit", "45–60 days").
-- Use "(Pending)" as value and set pending: true for any field not yet discussed.
-- Never reset a field that was already confirmed — preserve all prior answers.
-- The ambiguities array should list only genuinely unknown items.
-- The options array should contain 2–4 short strings for quick-reply buttons matching the next question's choices, otherwise [].
+- Use "(Pending)" as value and set pending: true for any field not yet discussed OR not relevant (but mark irrelevant fields in categoryRelevantFields instead of showing pending).
+- CRITICAL: Never reset a field that was already confirmed — if a field had pending: false, it must stay pending: false with its value intact.
+- Never regress: once a field is filled, never overwrite with (Pending).
+- The description field MUST be a professional supplier brief, NOT the buyer's raw first message.
+- The options array should contain 2–4 short strings separated by | (pipe) for quick-reply buttons, otherwise [].
 - Return ONLY the JSON object. Nothing else.`;
 
 const EMPTY_RFQ: RFQData = {
@@ -156,15 +183,15 @@ const EMPTY_RFQ: RFQData = {
   description: '',
   moq: '',
   specifications: [
-    { label: 'Dimensions (L × W × H)', value: '(Pending)', pending: true },
     { label: 'Materials / Grade', value: '(Pending)', pending: true },
-    { label: 'Unit Weight', value: '(Pending)', pending: true },
     { label: 'Target Unit Price', value: '(Pending)', pending: true },
-    { label: 'Colorways / Finish', value: '(Pending)', pending: true },
     { label: 'Packaging', value: '(Pending)', pending: true },
+    { label: 'Certifications / Standards', value: '(Pending)', pending: true },
+    { label: 'Dimensions (L × W × H)', value: '(Pending)', pending: true },
+    { label: 'Unit Weight', value: '(Pending)', pending: true },
+    { label: 'Colorways / Finish', value: '(Pending)', pending: true },
     { label: 'Branding / Labeling', value: '(Pending)', pending: true },
     { label: 'Surface Treatment / Coating', value: '(Pending)', pending: true },
-    { label: 'Certifications / Standards', value: '(Pending)', pending: true },
   ],
   manufacturingNotes: [
     { label: 'Production Process', value: '(Pending)', pending: true },
@@ -172,19 +199,36 @@ const EMPTY_RFQ: RFQData = {
     { label: 'Lead Time (days)', value: '(Pending)', pending: true },
     { label: 'Quality / Testing Requirements', value: '(Pending)', pending: true },
   ],
+  // Issue #5 #6 — commercial terms for international procurement
+  commercialTerms: [
+    { label: 'Incoterms', value: '(Pending)', pending: true },
+    { label: 'Payment Terms', value: '(Pending)', pending: true },
+    { label: 'Port of Loading', value: '(Pending)', pending: true },
+    { label: 'Destination Port', value: '(Pending)', pending: true },
+    { label: 'Sample Requirements', value: '(Pending)', pending: true },
+    { label: 'Required Documents', value: '(Pending)', pending: true },
+  ],
   ambiguities: [],
+  categoryRelevantFields: [], // Issue #2 — empty means show all; populated by AI
 };
 
 // ─── Parse options from conversational text ───────────────────────────────────
-function extractOptionsFromText(text: string): { cleanText: string; options: string[] } {
-  const optionsMatch = text.match(/OPTIONS:\s*(.+)$/m);
-  if (!optionsMatch) return { cleanText: text.trim(), options: [] };
-  const options = optionsMatch[1]
-    .split(',')
+// Issue #1 fix: use | as delimiter to prevent $1,500/kg splitting into two chips
+// Issue #8 fix: detect OPTIONS[multi]: prefix for multi-select questions
+function extractOptionsFromText(text: string): { cleanText: string; options: string[]; multiSelect: boolean } {
+  // Match both OPTIONS: and OPTIONS[multi]: patterns
+  const optionsMatch = text.match(/OPTIONS(?:\[(multi)\])?:\s*(.+)$/m);
+  if (!optionsMatch) return { cleanText: text.trim(), options: [], multiSelect: false };
+  const multiSelect = optionsMatch[1] === 'multi';
+  const rawOptions = optionsMatch[2];
+  // Use | as primary delimiter; fall back to , only when no | is present
+  const delimiter = rawOptions.includes('|') ? '|' : ',';
+  const options = rawOptions
+    .split(delimiter)
     .map((o) => o.trim())
     .filter(Boolean);
-  const cleanText = text.replace(/OPTIONS:\s*.+$/m, '').trim();
-  return { cleanText, options };
+  const cleanText = text.replace(/OPTIONS(?:\[multi\])?:\s*.+$/m, '').trim();
+  return { cleanText, options, multiSelect };
 }
 
 // ─── Decorative crescent dot-pattern SVG ─────────────────────────────────────
@@ -794,29 +838,67 @@ function TypingIndicator() {
 function MessageBubble({
   msg,
   onOptionClick,
+  onCorrect,
   isLoading,
 }: {
   msg: Message;
   onOptionClick: (opt: string) => void;
+  onCorrect?: (text: string) => void;
   isLoading: boolean;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedSingle, setSelectedSingle] = useState<string | null>(null);
+  const [selectedMulti, setSelectedMulti] = useState<Set<string>>(new Set());
+  const [multiConfirmed, setMultiConfirmed] = useState(false);
 
-  const handleSelect = (opt: string) => {
-    if (isLoading || selected) return;
-    setSelected(opt);
+  const handleSingleSelect = (opt: string) => {
+    if (isLoading || selectedSingle) return;
+    setSelectedSingle(opt);
     onOptionClick(opt);
+  };
+
+  const handleMultiToggle = (opt: string) => {
+    if (isLoading || multiConfirmed) return;
+    setSelectedMulti((prev) => {
+      const next = new Set(prev);
+      if (next.has(opt)) {
+        next.delete(opt);
+      } else {
+        next.add(opt);
+      }
+      return next;
+    });
+  };
+
+  const handleMultiConfirm = () => {
+    if (isLoading || multiConfirmed || selectedMulti.size === 0) return;
+    setMultiConfirmed(true);
+    onOptionClick(Array.from(selectedMulti).join(', '));
   };
 
   if (msg.role === 'user') {
     return (
-      <div className="flex justify-end mb-6">
+      <div className="flex justify-end items-center gap-1.5 mb-6 group">
+        {onCorrect && (
+          <button
+            onClick={() => onCorrect(msg.text)}
+            title="Correct this answer"
+            className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] text-gray-400 hover:text-primary transition-all duration-150 px-2 py-1 rounded-lg hover:bg-gray-50 flex-shrink-0"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Correct
+          </button>
+        )}
         <div className="bg-[#F0F0F2] text-[#0D0D14] text-sm px-4 py-2 rounded-2xl max-w-[70%] leading-relaxed">
           {msg.text}
         </div>
       </div>
     );
   }
+
+  const isMultiSelect = msg.multiSelect === true;
 
   return (
     <div className="mb-7">
@@ -835,35 +917,57 @@ function MessageBubble({
         </div>
       )}
 
+
       {/* Quick-reply chips — only on last non-streaming message */}
       {!msg.isStreaming && msg.options && msg.options.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-4">
-          {msg.options.map((opt, idx) => {
-            const isSelected = selected === opt;
-            return (
-              <button
-                key={`${idx}-${opt}`}
-                onClick={() => handleSelect(opt)}
-                disabled={isLoading || !!selected}
-                className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 disabled:cursor-not-allowed
-                  ${
-                    isSelected
-                      ? 'bg-[#0D0D14] border-[#0D0D14] text-white'
-                      : selected
-                        ? 'border-gray-200 text-gray-300 bg-white'
-                        : 'border-gray-300 text-[#0D0D14] bg-white hover:border-[#0D0D14] hover:bg-[#F5F5F8]'
-                  }`}
-              >
-                {isSelected && <CheckCircle size={12} className="inline mr-1.5 -mt-0.5" />}
-                {opt}
-              </button>
-            );
-          })}
+        <div className="mt-4">
+          {/* Issue #8: multi-select hint */}
+          {isMultiSelect && !multiConfirmed && (
+            <p className="text-xs text-gray-400 mb-2">Select all that apply</p>
+          )}
+          {/* Issue #1: chips use whitespace-nowrap to prevent truncation */}
+          <div className="flex flex-wrap gap-2">
+            {msg.options.map((opt, idx) => {
+              const isSingleSelected = !isMultiSelect && selectedSingle === opt;
+              const isMultiSelected = isMultiSelect && selectedMulti.has(opt);
+              const isSelected = isSingleSelected || isMultiSelected;
+              const isDisabledSingle = !isMultiSelect && (isLoading || !!selectedSingle);
+              const isDisabledMulti = isMultiSelect && (isLoading || multiConfirmed);
+              return (
+                <button
+                  key={`${idx}-${opt}`}
+                  onClick={() => isMultiSelect ? handleMultiToggle(opt) : handleSingleSelect(opt)}
+                  disabled={isDisabledSingle || isDisabledMulti}
+                  className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0
+                    ${
+                      isSelected
+                        ? 'bg-[#0D0D14] border-[#0D0D14] text-white'
+                        : (isDisabledSingle || isDisabledMulti)
+                          ? 'border-gray-200 text-gray-300 bg-white'
+                          : 'border-gray-300 text-[#0D0D14] bg-white hover:border-[#0D0D14] hover:bg-[#F5F5F8]'
+                    }`}
+                >
+                  {isSelected && <CheckCircle size={12} className="inline mr-1.5 -mt-0.5" />}
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+          {/* Issue #8: confirm button for multi-select */}
+          {isMultiSelect && !multiConfirmed && selectedMulti.size > 0 && (
+            <button
+              onClick={handleMultiConfirm}
+              className="mt-3 px-4 py-1.5 bg-[#0D0D14] text-white text-sm font-semibold rounded-full hover:bg-[#1a1a26] transition-colors"
+            >
+              Confirm ({selectedMulti.size} selected)
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
+
 
 // ─── RFQ Panel ────────────────────────────────────────────────────────────────
 function RFQPanel({
@@ -879,18 +983,39 @@ function RFQPanel({
   isLoading: boolean;
   onFinalize: () => void;
 }) {
-  const allSpecs = rfq.specifications;
+  // Issue #2: filter specs to only relevant fields for this category
+  const relevantLabels = rfq.categoryRelevantFields.length > 0
+    ? new Set(rfq.categoryRelevantFields)
+    : null; // null = show all (no category determined yet)
+
+  const visibleSpecs = relevantLabels
+    ? rfq.specifications.filter(s => relevantLabels.has(s.label))
+    : rfq.specifications;
+
   const allNotes = rfq.manufacturingNotes;
-  const totalFields = allSpecs.length + allNotes.length + 5;
-  const filledFields =
-    allSpecs.filter((s) => !s.pending).length +
-    allNotes.filter((n) => !n.pending).length +
+  const allCommercial = rfq.commercialTerms || [];
+
+  // Issue #3: compute completion including commercial terms; never go backwards
+  const filledSpecs = visibleSpecs.filter((s) => !s.pending).length;
+  const filledNotes = allNotes.filter((n) => !n.pending).length;
+  const filledCommercial = allCommercial.filter((c) => !c.pending).length;
+  const basicFilled =
     (rfq.productName ? 1 : 0) +
     (rfq.category ? 1 : 0) +
     (rfq.intendedUse ? 1 : 0) +
     (rfq.description ? 1 : 0) +
     (rfq.moq ? 1 : 0);
-  const completionPct = Math.round((filledFields / totalFields) * 100);
+
+  const totalFields = visibleSpecs.length + allNotes.length + allCommercial.length + 5;
+  const rawPct = totalFields > 0 ? Math.round(((filledSpecs + filledNotes + filledCommercial + basicFilled) / totalFields) * 100) : 0;
+
+  // Issue #3: high-water-mark — progress never decreases
+  const highWaterRef = React.useRef(0);
+  highWaterRef.current = Math.max(rawPct, highWaterRef.current);
+  const completionPct = highWaterRef.current;
+
+  // Issue #4: enforce 70% minimum before finalizing
+  const canFinalize = completionPct >= 70 && (!!rfq.productName || !!rfqTitle);
 
   const hasBasicInfo =
     rfq.productName || rfq.category || rfq.intendedUse || rfq.description || rfq.moq;
@@ -903,16 +1028,22 @@ function RFQPanel({
           {rfqTitle || 'New Product RFQ'}
         </h2>
         <div className="flex items-center gap-3 mt-3">
-          <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#0D0D14] rounded-full transition-all duration-700"
-              style={{ width: `${completionPct}%` }}
+              className="h-full rounded-full transition-all duration-700"
+              style={{
+                width: `${completionPct}%`,
+                backgroundColor: completionPct >= 70 ? '#16a34a' : '#0D0D14',
+              }}
             />
           </div>
-          <span className="text-xs font-semibold text-[#0D0D14] tabular-nums">
+          <span className={`text-xs font-semibold tabular-nums ${completionPct >= 70 ? 'text-green-600' : 'text-[#0D0D14]'}`}>
             {completionPct}%
           </span>
         </div>
+        {!canFinalize && completionPct > 0 && (
+          <p className="text-[10px] text-gray-400 mt-1.5">Complete 70% to finalize</p>
+        )}
       </div>
 
       {/* Panel body */}
@@ -932,26 +1063,28 @@ function RFQPanel({
           </p>
         )}
 
-        {/* Specifications */}
-        <div>
-          <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
-            Specifications:
-          </p>
-          <ul className="space-y-2">
-            {allSpecs.map((spec, i) => (
-              <li key={i} className="flex items-baseline gap-1.5 text-sm leading-snug">
-                <span className="text-gray-400 flex-shrink-0">•</span>
-                {spec.pending ? (
-                  <span className="text-gray-400 italic">{spec.label}: (Pending)</span>
-                ) : (
-                  <span className="text-[#0D0D14]">
-                    <span className="font-semibold">{spec.label}:</span> {spec.value}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Specifications — Issue #2: only relevant fields shown */}
+        {visibleSpecs.length > 0 && (
+          <div>
+            <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
+              Specifications:
+            </p>
+            <ul className="space-y-2">
+              {visibleSpecs.map((spec, i) => (
+                <li key={i} className="flex items-baseline gap-1.5 text-sm leading-snug">
+                  <span className="text-gray-400 flex-shrink-0">•</span>
+                  {spec.pending ? (
+                    <span className="text-gray-400 italic">{spec.label}: (Pending)</span>
+                  ) : (
+                    <span className="text-[#0D0D14]">
+                      <span className="font-semibold">{spec.label}:</span> {spec.value}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Manufacturing Notes */}
         <div>
@@ -967,6 +1100,27 @@ function RFQPanel({
                 ) : (
                   <span className="text-[#0D0D14]">
                     <span className="font-semibold">{note.label}:</span> {note.value}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Commercial Terms — Issue #5 #6: new section */}
+        <div>
+          <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
+            Commercial Terms:
+          </p>
+          <ul className="space-y-2">
+            {allCommercial.map((term, i) => (
+              <li key={i} className="flex items-baseline gap-1.5 text-sm leading-snug">
+                <span className="text-gray-400 flex-shrink-0">•</span>
+                {term.pending ? (
+                  <span className="text-gray-400 italic">{term.label}: (Pending)</span>
+                ) : (
+                  <span className="text-[#0D0D14]">
+                    <span className="font-semibold">{term.label}:</span> {term.value}
                   </span>
                 )}
               </li>
@@ -992,11 +1146,12 @@ function RFQPanel({
         )}
       </div>
 
-      {/* Finalize button */}
+      {/* Finalize button — Issue #4: 70% gate */}
       <div className="px-7 py-5 border-t border-gray-100">
         <button
           onClick={onFinalize}
-          disabled={finalized || isLoading || (!rfq.productName && !rfqTitle)}
+          disabled={finalized || isLoading || !canFinalize}
+          title={!canFinalize ? `Complete at least 70% of fields before finalizing (currently ${completionPct}%)` : undefined}
           className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#0D0D14] text-white rounded-xl text-sm font-semibold hover:bg-[#1a1a26] active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {finalized ? (
@@ -1009,11 +1164,19 @@ function RFQPanel({
             </>
           )}
         </button>
-        <p className="text-xs text-gray-400 text-center mt-2">Adds product to your sourcing list</p>
+        {!canFinalize && completionPct < 70 && (rfq.productName || rfqTitle) && (
+          <p className="text-xs text-gray-400 text-center mt-2">
+            {70 - completionPct}% more to go before finalizing
+          </p>
+        )}
+        {canFinalize && (
+          <p className="text-xs text-gray-400 text-center mt-2">Adds product to your sourcing list</p>
+        )}
       </div>
     </div>
   );
 }
+
 
 function InfoRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
@@ -1096,13 +1259,15 @@ function BuilderStep({ productText, productName }: { productText: string; produc
     if (!isStreaming && streamingResponse && messages.length > 0) {
       const last = messages[messages.length - 1];
       if (last?.isStreaming) {
-        const { cleanText, options: inlineOptions } = extractOptionsFromText(streamingResponse);
+        const { cleanText, options: inlineOptions, multiSelect } = extractOptionsFromText(streamingResponse);
 
         // Finalize the streaming message with clean text
+        // Issue #8: pass multiSelect flag through to message
         const finalMsg: Message = {
           ...last,
           text: cleanText,
           isStreaming: false,
+          multiSelect: multiSelect || undefined,
           options: inlineOptions.length > 0 ? inlineOptions : undefined,
         };
         setMessages((prev) => [...prev.slice(0, -1), finalMsg]);
@@ -1184,11 +1349,44 @@ function BuilderStep({ productText, productName }: { productText: string; produc
             }
             if (rfqUpdate.category) updated.category = rfqUpdate.category;
             if (rfqUpdate.intendedUse) updated.intendedUse = rfqUpdate.intendedUse;
-            if (rfqUpdate.description) updated.description = rfqUpdate.description;
+            // Issue #7: only update description if new value is substantively longer (prevent regression to raw input)
+            if (rfqUpdate.description) {
+              const newDesc = rfqUpdate.description;
+              const oldDesc = prev.description || '';
+              // Accept new description if it's longer or if current is empty/same as raw first message
+              if (!oldDesc || newDesc.length >= oldDesc.length) {
+                updated.description = newDesc;
+              }
+            }
             if (rfqUpdate.moq) updated.moq = rfqUpdate.moq;
-            if (rfqUpdate.specifications?.length) updated.specifications = rfqUpdate.specifications;
-            if (rfqUpdate.manufacturingNotes?.length)
-              updated.manufacturingNotes = rfqUpdate.manufacturingNotes;
+            // Issue #3: merge specs preserving filled fields (never regress to Pending)
+            if (rfqUpdate.specifications?.length) {
+              updated.specifications = rfqUpdate.specifications.map((newSpec: any) => {
+                const existing = prev.specifications.find(s => s.label === newSpec.label);
+                // Keep filled value if new would regress it to Pending
+                if (existing && !existing.pending && newSpec.pending) return existing;
+                return newSpec;
+              });
+            }
+            if (rfqUpdate.manufacturingNotes?.length) {
+              updated.manufacturingNotes = rfqUpdate.manufacturingNotes.map((newNote: any) => {
+                const existing = prev.manufacturingNotes.find(n => n.label === newNote.label);
+                if (existing && !existing.pending && newNote.pending) return existing;
+                return newNote;
+              });
+            }
+            // Issue #5 #6: merge commercial terms
+            if (rfqUpdate.commercialTerms?.length) {
+              updated.commercialTerms = rfqUpdate.commercialTerms.map((newTerm: any) => {
+                const existing = prev.commercialTerms.find(c => c.label === newTerm.label);
+                if (existing && !existing.pending && newTerm.pending) return existing;
+                return newTerm;
+              });
+            }
+            // Issue #2: update categoryRelevantFields from AI
+            if (rfqUpdate.categoryRelevantFields?.length) {
+              updated.categoryRelevantFields = rfqUpdate.categoryRelevantFields;
+            }
             if (rfqUpdate.ambiguities) updated.ambiguities = rfqUpdate.ambiguities;
             return updated;
           });
@@ -1299,11 +1497,22 @@ function BuilderStep({ productText, productName }: { productText: string; produc
         ? 'Demo User'
         : user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Enterprise Buyer';
 
+      // Issue #6: include commercial terms in submitted specs
+      const commercialSpecStr = (rfq.commercialTerms || [])
+        .filter(t => !t.pending)
+        .map(t => `${t.label}: ${t.value}`)
+        .join(' | ');
+      const productSpecStr = rfq.specifications
+        .filter(s => !s.pending)
+        .map(s => `${s.label}: ${s.value}`)
+        .join(', ');
+      const specsStr = [productSpecStr, commercialSpecStr].filter(Boolean).join(' || ');
+
       await submitRFQ({
         product: title,
         qty: rfq.moq || 'TBD',
         value: 'TBD',
-        specs: rfq.specifications.map((s) => `${s.label}: ${s.value}`).join(', '),
+        specs: specsStr || rfq.specifications.map((s) => `${s.label}: ${s.value}`).join(', '),
         buyer: buyerName,
         description: rfq.description || undefined,
         aiChat: conversationHistory,
@@ -1316,6 +1525,12 @@ function BuilderStep({ productText, productName }: { productText: string; produc
     toast.success('RFQ finalized! Product added to your list.');
     setTimeout(() => router.push('/products-list'), 1200);
   };
+
+  // Issue #10: pre-fill input with old answer so user can correct it
+  const handleCorrect = useCallback((oldText: string) => {
+    setInputValue(oldText);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
 
   const isDisabled = isStreaming || isProcessing;
 
@@ -1366,6 +1581,7 @@ function BuilderStep({ productText, productName }: { productText: string; produc
                   key={msg.id}
                   msg={msg}
                   onOptionClick={handleSend}
+                  onCorrect={msg.role === 'user' ? handleCorrect : undefined}
                   isLoading={isDisabled}
                 />
               ))}
@@ -1388,7 +1604,7 @@ function BuilderStep({ productText, productName }: { productText: string; produc
                       handleSend(inputValue);
                     }
                   }}
-                  placeholder="Describe what you want to build"
+                  placeholder="Type your answer or add more details…"
                   rows={2}
                   disabled={isDisabled}
                   className="w-full px-4 pt-3.5 pb-1 text-sm text-[#0D0D14] placeholder:text-gray-300 outline-none resize-none bg-transparent disabled:opacity-50 leading-relaxed"

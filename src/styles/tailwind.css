@@ -34,15 +34,18 @@
   * {
     box-sizing: border-box;
     border-color: var(--border);
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
   }
   html {
     scroll-behavior: smooth;
+    overscroll-behavior: none;
   }
   h1,
   h2,
@@ -52,6 +55,17 @@
   h6,
   p {
     margin: 0;
+  }
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+  button,
+  a,
+  [role='button'] {
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   /* Smooth scrollbar */
@@ -84,12 +98,17 @@
 @keyframes slide-up {
   from {
     opacity: 0;
-    transform: translateY(5px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 @keyframes slide-down-in {
@@ -106,6 +125,15 @@
 @keyframes slide-in-right {
   from {
     transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
   }
   to {
     transform: translateX(0);
@@ -137,22 +165,42 @@
 /* ── Animation utilities ───────────────────────────────────────────── */
 @layer utilities {
   .animate-fade-in {
-    animation: fade-in 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation: fade-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: opacity;
   }
   .animate-slide-up {
-    animation: slide-up 0.15s cubic-bezier(0.25, 0, 0.2, 1) both;
+    animation: slide-up 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: opacity, transform;
   }
   .animate-slide-down-in {
-    animation: slide-down-in 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation: slide-down-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: opacity, transform;
   }
   .animate-slide-in-right {
-    animation: slide-in-right 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation: slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: transform;
+  }
+  .animate-slide-in-left {
+    animation: slide-in-left 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: transform;
   }
   .animate-scale-in {
-    animation: scale-in 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: opacity, transform;
   }
   .animate-float-up {
-    animation: float-up 0.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation: float-up 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: opacity, transform;
+  }
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--muted) 25%,
+      color-mix(in srgb, var(--muted) 60%, white) 50%,
+      var(--muted) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
   }
 
   /* Staggered children */

@@ -493,7 +493,10 @@ export default function ProductDetailContent() {
   const completionPct = totalCount > 0 ? Math.round((filledCount / totalCount) * 100) : 0;
 
   return (
-    <div className="px-8 py-6 max-w-screen-2xl mx-auto">
+    // Outer: on ≥1024px, flex row when specs panel is open. Below 1024px always single column.
+    <div className={`max-w-screen-2xl mx-auto transition-all duration-300 ${specsOpen ? 'flex flex-col lg:flex-row gap-0' : 'block'}`}>
+      {/* ── Main content column ── */}
+      <div className={`${specsOpen ? 'lg:w-[60%] min-w-0' : 'w-full'} px-8 py-6 transition-all duration-300`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
@@ -522,11 +525,15 @@ export default function ProductDetailContent() {
             </span>
           )}
           <button
-            onClick={() => setSpecsOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+            onClick={() => setSpecsOpen(!specsOpen)}
+            className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+              specsOpen
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]'
+            }`}
           >
             <FileText size={15} />
-            Product specs
+            {specsOpen ? 'Hide specs' : 'Product specs'}
             {effectiveRfq && (
               <span className="ml-1 text-xs font-semibold text-primary">{completionPct}%</span>
             )}
@@ -592,42 +599,41 @@ export default function ProductDetailContent() {
       )}
 
       <ChatButton />
+      </div>{/* end main content column */}
 
-      {/* ── Product Specs Slide-over Panel ── */}
+      {/* ── Product RFQ Specs — inline panel (right column on ≥1024px, stacked below on mobile) ── */}
       {specsOpen && (
-        <div className="fixed inset-0 z-50 flex animate-fade-in">
-          <div
-            className="flex-1 bg-black/40 backdrop-blur-sm"
-            onClick={() => setSpecsOpen(false)}
-          />
-          <div className="w-full max-w-lg bg-[var(--background)] shadow-2xl flex flex-col h-full overflow-hidden animate-slide-in-right">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--background)]">
-              <div>
-                <h2 className="text-base font-bold text-[var(--foreground)]">Product RFQ Specs</h2>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5 truncate max-w-[280px]">
-                  {effectiveRfq?.name ?? product?.name}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {storedProduct && (
-                  <button
-                    onClick={openEdit}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
-                  >
-                    <Pencil size={13} />
-                    Update RFQ
-                  </button>
-                )}
-                <button
-                  onClick={() => setSpecsOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-[var(--muted)] transition-colors text-[var(--muted-foreground)]"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+        <div className="lg:w-[40%] flex-shrink-0 border-l border-[var(--border)] bg-[var(--background)] flex flex-col min-h-0 lg:sticky lg:top-0 lg:h-screen">
+          {/* Panel header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--background)] flex-shrink-0">
+            <div>
+              <h2 className="text-base font-bold text-[var(--foreground)]">Product RFQ Specs</h2>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5 truncate max-w-[280px]">
+                {effectiveRfq?.name ?? product?.name}
+              </p>
             </div>
+            <div className="flex items-center gap-2">
+              {storedProduct && (
+                <button
+                  onClick={openEdit}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+                >
+                  <Pencil size={13} />
+                  Update RFQ
+                </button>
+              )}
+              <button
+                onClick={() => setSpecsOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-[var(--muted)] transition-colors text-[var(--muted-foreground)]"
+                title="Close specs panel"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Panel body — scrollable */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
               {effectiveRfq ? (
                 <>
                   {/* Completion bar */}
@@ -751,9 +757,9 @@ export default function ProductDetailContent() {
                 </div>
               )}
             </div>
-          </div>
         </div>
       )}
+
 
       {/* ── Update RFQ Modal ── */}
       {editOpen && editForm && (

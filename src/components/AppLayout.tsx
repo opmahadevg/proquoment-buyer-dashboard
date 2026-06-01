@@ -1,15 +1,16 @@
 'use client';
-import React, { useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
 import NotificationCenter from './NotificationCenter';
 import PageTransition from './PageTransition';
+import NavProgressBar from './NavProgressBar';
 import { Toaster } from 'sonner';
 import { useRealtimeNotifications } from '@/lib/hooks/useRealtimeNotifications';
 import { userProfileService } from '@/lib/services/dbService';
 import { useAuth } from '@/contexts/AuthContext';
-import { LayoutDashboard, Package, Building2, Settings, Sparkles, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Package, Building2, Settings, Sparkles, Menu } from 'lucide-react';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -34,6 +35,7 @@ const PATH_TITLES: Record<string, string> = {
   '/shipments': 'Shipments',
   '/messages': 'Messages',
   '/account': 'Account Settings',
+  '/product-detail': 'Product Detail',
 };
 
 const getPageTitle = (path: string) => {
@@ -48,6 +50,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (pathname === '/new-product') setSidebarOpen(false);
@@ -78,39 +85,43 @@ export default function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--background)]">
       <Toaster position="bottom-right" richColors />
+      <Suspense fallback={null}>
+        <NavProgressBar />
+      </Suspense>
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar — always rendered, visibility via CSS */}
       <div className="hidden md:block">
         <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       </div>
 
       {/* Mobile Sidebar Overlay */}
       {mobileSidebarOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
+        <div className="md:hidden fixed inset-0 z-50 flex animate-fade-in">
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setMobileSidebarOpen(false)}
           />
-          <div className="relative z-10 w-64 h-full bg-white shadow-xl">
+          <div className="relative z-10 w-64 h-full bg-white shadow-xl animate-slide-in-left">
             <Sidebar open={true} onToggle={() => setMobileSidebarOpen(false)} />
           </div>
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Main Content — margin driven by CSS class, not inline window check */}
       <div
-        className="flex flex-col flex-1 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
-        style={{
-          marginLeft:
-            typeof window !== 'undefined' && window.innerWidth >= 768
-              ? sidebarOpen
-                ? '240px'
-                : '64px'
-              : 0,
-        }}
+        className={[
+          'flex flex-col flex-1 min-w-0 overflow-hidden',
+          'transition-[margin-left] duration-[280ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+          // Only apply margin after mount to avoid SSR mismatch
+          mounted
+            ? sidebarOpen
+              ? 'md:ml-[240px]'
+              : 'md:ml-[64px]'
+            : 'md:ml-[240px]',
+        ].join(' ')}
       >
         {/* Desktop Top Header */}
-        <div className="hidden md:flex items-center justify-between px-6 bg-white border-b border-[var(--border)] sticky top-0 z-30 min-h-[56px] h-[56px] flex-shrink-0">
+        <div className="hidden md:flex items-center justify-between px-6 bg-white border-b border-[var(--border)] sticky top-0 z-30 h-[56px] flex-shrink-0">
           <div className="flex items-center gap-3">
             <h1 className="text-sm font-bold text-[var(--foreground)] tracking-tight">
               {getPageTitle(pathname)}
@@ -131,7 +142,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </div>
 
         {/* Mobile Top Header */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-[var(--border)] sticky top-0 z-30 min-h-[56px] h-[56px] flex-shrink-0">
+        <div className="md:hidden flex items-center justify-between px-4 bg-white border-b border-[var(--border)] sticky top-0 z-30 h-[56px] flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
               <img
@@ -155,19 +166,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+        <main className="flex-1 overflow-y-auto pb-20 md:pb-0 overscroll-none">
           <PageTransition>{children}</PageTransition>
         </main>
 
         {/* Mobile Bottom Nav */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-[var(--border)] safe-area-pb">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-[var(--border)]">
           <div className="flex items-center justify-around px-2 py-2">
             {BOTTOM_NAV.map(({ href, icon: Icon, label, primary }) => {
               const active = isActive(href);
               if (primary) {
                 return (
                   <Link key={href} href={href} className="flex flex-col items-center gap-0.5">
-                    <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-md">
+                    <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-md active:scale-95 transition-transform">
                       <Icon size={18} className="text-white" />
                     </div>
                     <span className="text-[10px] font-medium text-primary">{label}</span>
