@@ -18,6 +18,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { getDraftCount } from '@/lib/services/procurementApi';
 
 interface SidebarProps {
   open: boolean;
@@ -30,6 +31,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
   const { signOut, user } = useAuth();
   const [userEmail, setUserEmail] = useState('');
   const [signingOut, setSigningOut] = useState(false);
+  const [draftCount, setDraftCount] = useState(0);
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -39,6 +41,10 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
   useEffect(() => {
     if (user?.email) setUserEmail(user.email);
   }, [user]);
+
+  useEffect(() => {
+    getDraftCount().then(setDraftCount).catch(() => {});
+  }, [pathname]);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -189,6 +195,11 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
             style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
           >
             My RFQs
+            {draftCount > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[9px] font-bold rounded-full bg-amber-100 text-amber-700">
+                {draftCount}
+              </span>
+            )}
           </span>
           {!open && (
             <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">

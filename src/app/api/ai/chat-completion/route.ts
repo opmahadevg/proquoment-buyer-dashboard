@@ -18,21 +18,21 @@ const API_KEYS: Record<string, string | undefined> = {
 const FALLBACK_CHAIN = [
   {
     provider: 'GROQ',
-    model: 'llama-3.3-70b-versatile',
+    model: 'openai/gpt-oss-120b',
     keyEnv: 'GROQ_API_KEY',
     baseUrl: 'https://api.groq.com/openai/v1',
     extraHeaders: {} as Record<string, string>,
   },
   {
     provider: 'GROQ',
-    model: 'llama-3.3-70b-versatile',
+    model: 'openai/gpt-oss-120b',
     keyEnv: 'GROQ_API_KEY_2',
     baseUrl: 'https://api.groq.com/openai/v1',
     extraHeaders: {} as Record<string, string>,
   },
   {
     provider: 'GROQ',
-    model: 'llama-3.3-70b-versatile',
+    model: 'openai/gpt-oss-120b',
     keyEnv: 'GROQ_API_KEY_3',
     baseUrl: 'https://api.groq.com/openai/v1',
     extraHeaders: {} as Record<string, string>,

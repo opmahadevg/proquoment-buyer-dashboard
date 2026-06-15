@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,9 +24,10 @@ import {
   CheckCircle2,
   Circle,
   CircleDotDashed,
+  Save,
 } from 'lucide-react';
 import { saveProduct } from '@/lib/productStore';
-import { submitRFQ } from '@/lib/services/procurementApi';
+import { submitRFQ, saveDraftRFQ, fetchDraftRFQ, deleteDraftRFQ } from '@/lib/services/procurementApi';
 import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1188,7 +1189,7 @@ function InfoRow({ label, value, bold }: { label: string; value: string; bold?: 
 }
 
 // ─── Step 4: RFQ Builder (Dual Gemini calls) ──────────────────────────────────
-function BuilderStep({ productText, productName }: { productText: string; productName: string }) {
+function BuilderStep({ productText, productName, draftId: initialDraftId }: { productText: string; productName: string; draftId?: string }) {
   const router = useRouter();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1204,6 +1205,13 @@ function BuilderStep({ productText, productName }: { productText: string; produc
   const [isProcessing, setIsProcessing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Draft state ──
+  const [draftId, setDraftId] = useState<string | undefined>(initialDraftId);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const draftSaveCounterRef = useRef(0); // tracks AI responses for auto-save
+  const draftRestoredRef = useRef(false);
 
   // Streaming hook for conversational text only
   const {
@@ -1275,6 +1283,13 @@ function BuilderStep({ productText, productName }: { productText: string; produc
         // Add to conversation history
         const updatedHistory = [...conversationHistory, { role: 'assistant', content: cleanText }];
         setConversationHistory(updatedHistory);
+
+        // ── Auto-save draft every 2 AI responses ──
+        draftSaveCounterRef.current += 1;
+        if (draftSaveCounterRef.current % 2 === 0 && !finalized) {
+          // Use setTimeout so state has settled
+          setTimeout(() => triggerDraftSave(), 500);
+        }
 
         // Fire JSON extraction every other AI response to halve API usage
         jsonCallCounterRef.current += 1;
@@ -1423,6 +1438,84 @@ function BuilderStep({ productText, productName }: { productText: string; produc
     []
   );
 
+  // ── Draft save function ──
+  const triggerDraftSave = useCallback(async () => {
+    if (finalized || draftSaving) return;
+    setDraftSaving(true);
+    setDraftSaved(false);
+    try {
+      // Compute completion pct inline
+      const filledSpecs = rfq.specifications.filter(s => !s.pending).length;
+      const filledNotes = rfq.manufacturingNotes.filter(n => !n.pending).length;
+      const filledCommercial = (rfq.commercialTerms || []).filter(c => !c.pending).length;
+      const basicFilled = (rfq.productName ? 1 : 0) + (rfq.category ? 1 : 0) + (rfq.intendedUse ? 1 : 0) + (rfq.description ? 1 : 0) + (rfq.moq ? 1 : 0);
+      const totalFields = rfq.specifications.length + rfq.manufacturingNotes.length + (rfq.commercialTerms || []).length + 5;
+      const pct = totalFields > 0 ? Math.round(((filledSpecs + filledNotes + filledCommercial + basicFilled) / totalFields) * 100) : 0;
+
+      const savedId = await saveDraftRFQ({
+        id: draftId,
+        title: rfqTitle || deriveProductName(productText) || 'Untitled RFQ',
+        productText,
+        rfqData: rfq,
+        conversationHistory,
+        messages: messages.filter(m => !m.isStreaming), // don't save streaming state
+        completionPct: pct,
+      });
+      setDraftId(savedId);
+      setDraftSaved(true);
+      setTimeout(() => setDraftSaved(false), 2000);
+    } catch (err) {
+      console.error('Draft save failed:', err);
+    } finally {
+      setDraftSaving(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId, rfqTitle, productText, rfq, conversationHistory, messages, finalized, draftSaving]);
+
+  // ── Auto-save on page leave ──
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!finalized && messages.length > 1) {
+        // Best-effort save via sendBeacon isn't practical for Supabase, but we
+        // trigger save on visibilitychange which fires before unload
+        triggerDraftSave();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && !finalized && messages.length > 1) {
+        triggerDraftSave();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [triggerDraftSave, finalized, messages.length]);
+
+  // ── Restore draft on mount ──
+  useEffect(() => {
+    if (!initialDraftId || draftRestoredRef.current) return;
+    draftRestoredRef.current = true;
+
+    (async () => {
+      const draft = await fetchDraftRFQ(initialDraftId);
+      if (!draft) {
+        toast.error('Draft not found');
+        return;
+      }
+      // Restore state
+      setRfqTitle(draft.title);
+      setRfq(draft.rfqData as RFQData);
+      setConversationHistory(draft.conversationHistory);
+      setMessages(draft.messages as Message[]);
+      setDraftId(draft.id);
+      setInitialized(true); // prevent re-initialization
+      toast.success('Draft restored — continue your RFQ');
+    })();
+  }, [initialDraftId]);
+
   // Initialize conversation
   const initializeConversation = useCallback(() => {
     if (initialized || !productText) return;
@@ -1521,6 +1614,15 @@ function BuilderStep({ productText, productName }: { productText: string; produc
       console.error('Failed to submit RFQ to Admin', err);
     }
 
+    // Delete draft on finalize
+    if (draftId) {
+      try {
+        await deleteDraftRFQ(draftId);
+      } catch {
+        // Non-critical — draft cleanup failure shouldn't block finalization
+      }
+    }
+
     setFinalized(true);
     toast.success('RFQ finalized! Product added to your list.');
     setTimeout(() => router.push('/products-list'), 1200);
@@ -1558,6 +1660,29 @@ function BuilderStep({ productText, productName }: { productText: string; produc
             placeholder="Product RFQ title…"
           />
         </div>
+        {/* Save Draft button */}
+        {!finalized && (
+          <button
+            onClick={() => triggerDraftSave()}
+            disabled={draftSaving || messages.length < 2}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0 ${
+              draftSaved
+                ? 'bg-green-50 text-green-600 border border-green-200'
+                : draftSaving
+                  ? 'bg-gray-50 text-gray-400 border border-gray-200'
+                  : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+            title="Save as draft"
+          >
+            {draftSaved ? (
+              <><CheckCircle size={12} /> Saved</>
+            ) : draftSaving ? (
+              <><Loader2 size={12} className="animate-spin" /> Saving…</>
+            ) : (
+              <><Save size={12} /> Save Draft</>
+            )}
+          </button>
+        )}
         <button
           onClick={() => setPanelOpen(!panelOpen)}
           className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-[#0D0D14] hover:bg-gray-50 transition-colors"
@@ -1810,10 +1935,23 @@ function UploadStep({
 // ─── Main orchestrator ────────────────────────────────────────────────────────
 export default function NewProductFlow() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const [step, setStep] = useState<Step>('intro');
   const [productText, setProductText] = useState('');
   const [rfqMethod, setRfqMethod] = useState<RFQMethod>('scratch');
+  const [draftId, setDraftId] = useState<string | undefined>();
+
+  // ── Check for draft query param on mount ──
+  useEffect(() => {
+    const draft = searchParams.get('draft');
+    if (draft) {
+      setDraftId(draft);
+      setStep('builder');
+      // productText will be restored from draft inside BuilderStep
+      setProductText('(Resuming draft)');
+    }
+  }, [searchParams]);
 
   const productName = deriveProductName(productText);
 
@@ -1910,5 +2048,5 @@ export default function NewProductFlow() {
       />
     );
   }
-  return <BuilderStep productText={productText} productName={productName} />;
+  return <BuilderStep productText={productText} productName={productName} draftId={draftId} />;
 }

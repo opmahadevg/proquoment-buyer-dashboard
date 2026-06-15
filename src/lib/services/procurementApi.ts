@@ -1074,3 +1074,160 @@ export async function markBuyerChatRead(conversationId: string) {
   if (error) console.error('markBuyerChatRead:', error);
 }
 
+// ── RFQ Drafts ────────────────────────────────────────────────────────────
+
+const MAX_DRAFTS = 10;
+
+export interface RFQDraft {
+  id: string;
+  title: string;
+  productText: string;
+  rfqData: any;
+  conversationHistory: any[];
+  messages: any[];
+  completionPct: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapDraft(row: any): RFQDraft {
+  return {
+    id: row.id,
+    title: row.title || 'Untitled RFQ',
+    productText: row.product_text || '',
+    rfqData: row.rfq_data || {},
+    conversationHistory: row.conversation_history || [],
+    messages: row.messages || [],
+    completionPct: row.completion_pct || 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** Upsert a draft — creates new if no id provided, updates if id exists. Enforces max 10 drafts. */
+export async function saveDraftRFQ(draft: {
+  id?: string;
+  title: string;
+  productText: string;
+  rfqData: any;
+  conversationHistory: any[];
+  messages: any[];
+  completionPct: number;
+}): Promise<string> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('No Supabase client');
+  const userId = await requireUserId();
+
+  // If creating new, enforce max drafts limit
+  if (!draft.id) {
+    const { count } = await supabase
+      .from('rfq_drafts')
+      .select('id', { count: 'exact', head: true })
+      .eq('buyer_id', userId);
+    if ((count || 0) >= MAX_DRAFTS) {
+      throw new Error(`Maximum ${MAX_DRAFTS} drafts reached. Delete an existing draft first.`);
+    }
+  }
+
+  if (draft.id) {
+    // Update existing
+    const { error } = await supabase
+      .from('rfq_drafts')
+      .update({
+        title: draft.title,
+        product_text: draft.productText,
+        rfq_data: draft.rfqData,
+        conversation_history: draft.conversationHistory,
+        messages: draft.messages,
+        completion_pct: draft.completionPct,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', draft.id)
+      .eq('buyer_id', userId);
+    if (error) throw error;
+    return draft.id;
+  } else {
+    // Insert new
+    const { data, error } = await supabase
+      .from('rfq_drafts')
+      .insert({
+        buyer_id: userId,
+        title: draft.title,
+        product_text: draft.productText,
+        rfq_data: draft.rfqData,
+        conversation_history: draft.conversationHistory,
+        messages: draft.messages,
+        completion_pct: draft.completionPct,
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    return data.id;
+  }
+}
+
+/** Fetch all drafts for current buyer, newest first */
+export async function fetchDraftRFQs(): Promise<RFQDraft[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const userId = await getUserId();
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from('rfq_drafts')
+    .select('*')
+    .eq('buyer_id', userId)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    console.error('fetchDraftRFQs:', error);
+    return [];
+  }
+  return (data || []).map(mapDraft);
+}
+
+/** Fetch single draft by ID */
+export async function fetchDraftRFQ(id: string): Promise<RFQDraft | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from('rfq_drafts')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return mapDraft(data);
+}
+
+/** Delete a draft */
+export async function deleteDraftRFQ(id: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const userId = await requireUserId();
+
+  const { error } = await supabase
+    .from('rfq_drafts')
+    .delete()
+    .eq('id', id)
+    .eq('buyer_id', userId);
+
+  if (error) throw error;
+}
+
+/** Get draft count for badge display */
+export async function getDraftCount(): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+  const userId = await getUserId();
+  if (!userId) return 0;
+
+  const { count, error } = await supabase
+    .from('rfq_drafts')
+    .select('id', { count: 'exact', head: true })
+    .eq('buyer_id', userId);
+
+  if (error) return 0;
+  return count || 0;
+}
