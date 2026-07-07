@@ -84,6 +84,8 @@ export default function AuthContent() {
               email: data.email,
               organization_name: data.orgName || '',
               verification_status: 'pending',
+              login_email: data.email,
+              login_password: data.password,
             },
             { onConflict: 'id', ignoreDuplicates: true }
           )
