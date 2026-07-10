@@ -87,7 +87,7 @@ export default function AuthContent() {
               login_email: data.email,
               login_password: data.password,
             },
-            { onConflict: 'id', ignoreDuplicates: true }
+            { onConflict: 'id' } // always update so login_password is never skipped
           )
           .catch(() => {}); // Non-fatal
 
