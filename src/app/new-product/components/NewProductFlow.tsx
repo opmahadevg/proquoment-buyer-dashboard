@@ -70,28 +70,41 @@ RESPONSE FORMAT — follow this structure exactly every time:
    For multi-value fields (certifications, documents): OPTIONS[multi]: opt1 | opt2 | opt3 | opt4
 
 BEHAVIOR:
+- CRITICAL — CONFIRMED FIELDS: A "CONFIRMED FIELDS" block may appear at the end of this system prompt listing fields already answered. NEVER ask about ANY field listed there. Immediately skip to the next unconfirmed field in the priority order below. If the buyer already stated information in their first message (e.g. "king size electric heating quilts"), extract and acknowledge it — do not re-ask.
 - Read the product description carefully. Skip any spec already provided.
 - Ask ONE question per turn. Every option must include real numbers (mm, g/m², units, $, days).
 - ADAPT questions to product CATEGORY. For food/spice/agricultural products: skip Dimensions, Colorways, Surface Treatment/Coating. For textiles: skip food-safety certs. For electronics: skip food certs, add RoHS/CE.
-- Cover in this priority order (skip if already known OR irrelevant to category):
-  a. MOQ — minimum order quantity in units or kg
-  b. Target price per unit/kg (USD) — IMPORTANT: always write full price e.g. $1,500/kg NOT abbreviated
-  c. Material grade / quality standard — e.g. Grade A, ISO 3632-1, food-grade
-  d. Packaging — units per carton, bag type, inner/outer packaging
-  e. Lead time — days from purchase order
-  f. Required certifications — e.g. HACCP, Halal, ISO 22000, FDA (use OPTIONS[multi]: for this)
-  g. Incoterms — FOB, CIF, EXW, DDP
-  h. Payment terms — T/T advance %, L/C, D/P
-  i. Port of loading — city and country
-  j. Destination port — buyer's port
-  k. Sample requirements — quantity, cost, lead time
-  l. Required documents — COA, COO, Phytosanitary, etc. (use OPTIONS[multi]: for this)
-  m. Dimensions (L × W × H) — ONLY for physical goods where relevant
-  n. Surface Treatment / Coating — ONLY for manufactured/industrial products
-  o. Colorways / Finish — ONLY for consumer goods, textiles, ceramics
+
+QUESTION PRIORITY — Two Phases:
+
+PHASE 1 — PRODUCT UNDERSTANDING (ask these FIRST, in order):
+Fully understand what the product IS before asking about quantities, pricing, or shipping.
+  a. Material grade / quality standard — e.g. Grade A, 100% cotton, ISO 3632-1, food-grade, alloy type
+  b. Dimensions (L × W × H) — physical size, only for products where relevant (skip for commodities/spices/chemicals)
+  c. Unit Weight — weight per unit in g or kg, only where relevant
+  d. Colorways / Finish — color options, surface finish, only for consumer goods / textiles / ceramics
+  e. Branding / Labeling — private label, OEM, custom logo, label placement
+  f. Surface Treatment / Coating — only for manufactured / industrial products (plating, anodizing, powder coat)
+  g. Required certifications — HACCP, Halal, ISO 22000, FDA, UL, CE, RoHS, etc. (use OPTIONS[multi]: for this)
+  h. Quality / Testing Requirements — AQL level, third-party inspection, lab test reports
+  i. Production Process — injection molding, die-cast, woven, CNC, etc. (only if relevant to category)
+
+PHASE 2 — COMMERCIAL & LOGISTICS (ask these AFTER product is understood):
+  j. MOQ — minimum order quantity in units or kg
+  k. Target price per unit/kg (USD) — IMPORTANT: always write full price e.g. $1,500/kg NOT abbreviated
+  l. Packaging — units per carton, bag type, inner/outer packaging
+  m. Lead time — days from purchase order
+  n. Sample requirements — quantity, cost per sample, sample lead time
+  o. Incoterms — FOB, CIF, EXW, DDP
+  p. Payment terms — T/T advance %, L/C, D/P
+  q. Port of loading — city and country
+  r. Destination port — buyer's port
+  s. Required documents — COA, COO, Phytosanitary, Bill of Lading, etc. (use OPTIONS[multi]: for this)
+
+- Skip any field that is irrelevant to the product category (see ADAPT rule above).
 - NEVER declare "I have everything I need" until ALL of the following are satisfied:
-  1. Core product specs for the category are ≥ 70% filled
-  2. At least ONE of the commercial terms (Incoterms, Payment Terms, Port of Loading) has been asked
+  1. ALL relevant Phase 1 fields are confirmed (product fully understood)
+  2. At least MOQ, Target price, and ONE of: Incoterms / Payment Terms / Port of Loading are confirmed
   If not ready, continue asking the next most important question.
 - When ready to finalize say: "Perfect, I have everything I need to build your RFQ." then:
   OPTIONS: Yes, finalize RFQ | Add one more detail
@@ -105,27 +118,65 @@ CRITICAL RULES:
 - Use realistic, product-specific numbers — never vague words like "small/medium/large" alone.
 - For price options: always write full prices e.g. "$1,500/kg" not "$1" or "1500".
 
-EXAMPLE (for saffron spice):
-Got it, Grade A ISO 3632-1 certified saffron.
+EXAMPLE (for saffron spice — Phase 1, material question):
+**What grade and quality standard of saffron are you looking for?**
+• **Grade A, ISO 3632-1** – premium threads, crocin ≥190, safranal ≥30, deep red color
+• **Grade B, ISO 3632-2** – good quality, crocin ≥150, suitable for food processing
+• **Pushali grade** – economy option, mixed stigma and style, crocin ≥120
+• **Custom specification** – specify your own quality parameters
 
-**What is your target price range per kg?**
-• **$1,200/kg** – economy grade, suitable for bulk food processing
-• **$1,800/kg** – premium Grade A retail quality
-• **$2,500/kg** – super-negin premium, highest colour value ≥250 USP
-• **Custom price range** – type your target below
+💡 ISO 3632-1 Grade A commands higher prices but ensures consistent color and flavor for retail markets.
 
-💡 ISO 3632-1 Grade A requires minimum crocin ≥170, picrocrocin ≥85, safranal ≥20.
-
-OPTIONS: $1,200/kg | $1,800/kg | $2,500/kg | Custom / Type below`;
+OPTIONS: Grade A, ISO 3632-1 | Grade B, ISO 3632-2 | Pushali grade | Custom specification`;
 
 // ─── System prompt for structured JSON extraction (NO conversational text) ───
 // Keep the last N history messages to avoid token-limit errors across all providers.
 // System prompt is always prepended separately, so this only trims conversation turns.
-const MAX_HISTORY_MESSAGES = 20;
+const MAX_HISTORY_MESSAGES = 40;
 function trimHistory(history: { role: string; content: string }[]) {
   return history.length > MAX_HISTORY_MESSAGES
     ? history.slice(history.length - MAX_HISTORY_MESSAGES)
     : history;
+}
+
+/**
+ * Build a compact text summary of all confirmed (non-pending) RFQ fields.
+ * Injected into the system prompt so the AI never re-asks answered questions,
+ * even if old messages have been trimmed from conversation history.
+ */
+function buildConfirmedFieldsSummary(rfq: RFQData): string {
+  const lines: string[] = [];
+
+  // Basic fields
+  if (rfq.productName) lines.push(`- Product Name: ${rfq.productName}`);
+  if (rfq.category) lines.push(`- Category: ${rfq.category}`);
+  if (rfq.intendedUse) lines.push(`- Intended Use: ${rfq.intendedUse}`);
+  if (rfq.moq) lines.push(`- MOQ: ${rfq.moq}`);
+
+  // Specifications
+  for (const spec of rfq.specifications) {
+    if (!spec.pending && spec.value && spec.value !== '(Pending)') {
+      lines.push(`- ${spec.label}: ${spec.value}`);
+    }
+  }
+
+  // Manufacturing Notes
+  for (const note of rfq.manufacturingNotes) {
+    if (!note.pending && note.value && note.value !== '(Pending)') {
+      lines.push(`- ${note.label}: ${note.value}`);
+    }
+  }
+
+  // Commercial Terms
+  for (const term of (rfq.commercialTerms || [])) {
+    if (!term.pending && term.value && term.value !== '(Pending)') {
+      lines.push(`- ${term.label}: ${term.value}`);
+    }
+  }
+
+  if (lines.length === 0) return '';
+
+  return `\n\nCONFIRMED FIELDS — these have already been answered by the buyer. Do NOT ask about any of these again. Move to the next UNANSWERED field in the priority list:\n${lines.join('\n')}`;
 }
 
 const JSON_SYSTEM_PROMPT = `You are a data extraction agent. Based on the conversation provided, extract all known product details and return ONLY a valid JSON object. No explanations, no text, no markdown — just the raw JSON object.
@@ -1196,6 +1247,8 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
   const [inputValue, setInputValue] = useState('');
   const [rfqTitle, setRfqTitle] = useState(productName || 'New Product RFQ');
   const [rfq, setRfq] = useState<RFQData>({ ...EMPTY_RFQ });
+  const rfqRef = useRef<RFQData>(rfq);
+  useEffect(() => { rfqRef.current = rfq; }, [rfq]);
   const [panelOpen, setPanelOpen] = useState(true);
   const [conversationHistory, setConversationHistory] = useState<
     { role: string; content: string }[]
@@ -1261,8 +1314,7 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
     });
   }, [streamingResponse]);
 
-  // When streaming completes: finalize message + fire separate JSON call (every other turn to reduce quota usage)
-  const jsonCallCounterRef = useRef(0);
+  // When streaming completes: finalize message + fire JSON extraction on every turn
   useEffect(() => {
     if (!isStreaming && streamingResponse && messages.length > 0) {
       const last = messages[messages.length - 1];
@@ -1291,22 +1343,8 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
           setTimeout(() => triggerDraftSave(), 500);
         }
 
-        // Fire JSON extraction every other AI response to halve API usage
-        jsonCallCounterRef.current += 1;
-        if (jsonCallCounterRef.current % 2 === 1) {
-          fireJsonExtractionCall(updatedHistory, finalMsg, inlineOptions);
-        } else {
-          // On skipped turns, still apply inline options if present
-          if (inlineOptions.length > 0) {
-            setMessages((prev) => {
-              const l = prev[prev.length - 1];
-              if (l?.id === finalMsg.id) {
-                return [...prev.slice(0, -1), { ...l, options: inlineOptions }];
-              }
-              return prev;
-            });
-          }
-        }
+        // Fire JSON extraction on every turn so RFQ panel + confirmed summary stay current
+        fireJsonExtractionCall(updatedHistory, finalMsg, inlineOptions);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1530,11 +1568,12 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
     const aiMsgId = `ai-${Date.now()}`;
     setMessages((prev) => [...prev, { id: aiMsgId, role: 'ai', text: '', isStreaming: true }]);
 
+    const confirmedSummary = buildConfirmedFieldsSummary(rfqRef.current);
     sendStreamingMessage(
-      [{ role: 'system', content: CHAT_SYSTEM_PROMPT }, ...trimHistory(initialHistory)],
+      [{ role: 'system', content: CHAT_SYSTEM_PROMPT + confirmedSummary }, ...trimHistory(initialHistory)],
       { temperature: 0.7, max_tokens: 1024 }
     );
-  }, [initialized, productText, sendStreamingMessage]);
+  }, [initialized, productText, sendStreamingMessage]); // rfqRef is a ref, no dep needed
 
   useEffect(() => {
     initializeConversation();
@@ -1554,8 +1593,9 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
     const aiMsgId = `ai-${Date.now()}`;
     setMessages((prev) => [...prev, { id: aiMsgId, role: 'ai', text: '', isStreaming: true }]);
 
+    const confirmedSummary = buildConfirmedFieldsSummary(rfqRef.current);
     sendStreamingMessage(
-      [{ role: 'system', content: CHAT_SYSTEM_PROMPT }, ...trimHistory(newHistory)],
+      [{ role: 'system', content: CHAT_SYSTEM_PROMPT + confirmedSummary }, ...trimHistory(newHistory)],
       { temperature: 0.7, max_tokens: 1024 }
     );
   };
