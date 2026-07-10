@@ -42,6 +42,9 @@ const FALLBACK_CHAIN = [
 // Status codes that mean "try the next provider"
 const RETRIABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
+// Round-robin counter — each call starts at a different key to distribute load
+let roundRobinIndex = 0;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatErrorResponse(error: unknown, provider?: string) {
   const statusCode = (error as any)?.statusCode || (error as any)?.status || 500;
@@ -152,7 +155,12 @@ async function handleAutoFallback(
   const errors: string[] = [];
   let attempted = 0;
 
-  for (const entry of FALLBACK_CHAIN) {
+  // Rotate starting index so concurrent calls (streaming + JSON) don't both hit key 1
+  const startIdx = roundRobinIndex % FALLBACK_CHAIN.length;
+  roundRobinIndex++;
+
+  for (let i = 0; i < FALLBACK_CHAIN.length; i++) {
+    const entry = FALLBACK_CHAIN[(startIdx + i) % FALLBACK_CHAIN.length];
     const apiKey = process.env[entry.keyEnv];
     if (!apiKey) {
       console.log(`[AI Fallback] Skipping ${entry.provider} (${entry.model}) — no API key`);
