@@ -1304,7 +1304,7 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
     });
   }, [streamingResponse]);
 
-  // When streaming completes: finalize message + fire JSON extraction on every turn
+  // When streaming completes: finalize message + update conversation history
   useEffect(() => {
     if (!isStreaming && streamingResponse && messages.length > 0) {
       const last = messages[messages.length - 1];
@@ -1329,12 +1329,8 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
         // ── Auto-save draft every 2 AI responses ──
         draftSaveCounterRef.current += 1;
         if (draftSaveCounterRef.current % 2 === 0 && !finalized) {
-          // Use setTimeout so state has settled
           setTimeout(() => triggerDraftSave(), 500);
         }
-
-        // Fire JSON extraction on every turn so RFQ panel + confirmed summary stay current
-        fireJsonExtractionCall(updatedHistory, finalMsg, inlineOptions);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1579,6 +1575,11 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
 
     const newHistory = [...conversationHistory, { role: 'user', content: trimmed }];
     setConversationHistory(newHistory);
+
+    // Fire JSON extraction immediately in parallel — don't wait for AI chat to finish.
+    // User's answer already contains the data we need to update the RFQ panel live.
+    const placeholderMsg: Message = { id: `ai-json-${Date.now()}`, role: 'ai', text: '' };
+    fireJsonExtractionCall(newHistory, placeholderMsg, []);
 
     const aiMsgId = `ai-${Date.now()}`;
     setMessages((prev) => [...prev, { id: aiMsgId, role: 'ai', text: '', isStreaming: true }]);
