@@ -47,6 +47,31 @@ export function Globe({
   const thetaOffsetRef = useRef(0);
   const isPausedRef = useRef(false);
 
+  // Store all props in refs so the animation loop always reads latest values
+  // without triggering a globe re-initialisation on every parent re-render.
+  const markersRef = useRef(markers);
+  const markerColorRef = useRef(markerColor);
+  const baseColorRef = useRef(baseColor);
+  const darkRef = useRef(dark);
+  const mapBrightnessRef = useRef(mapBrightness);
+  const markerSizeRef = useRef(markerSize);
+  const speedRef = useRef(speed);
+  const thetaRef = useRef(theta);
+  const diffuseRef = useRef(diffuse);
+  const mapSamplesRef = useRef(mapSamples);
+
+  // Keep refs in sync with latest props each render (no re-init needed)
+  useEffect(() => { markersRef.current = markers; }, [markers]);
+  useEffect(() => { markerColorRef.current = markerColor; }, [markerColor]);
+  useEffect(() => { baseColorRef.current = baseColor; }, [baseColor]);
+  useEffect(() => { darkRef.current = dark; }, [dark]);
+  useEffect(() => { mapBrightnessRef.current = mapBrightness; }, [mapBrightness]);
+  useEffect(() => { markerSizeRef.current = markerSize; }, [markerSize]);
+  useEffect(() => { speedRef.current = speed; }, [speed]);
+  useEffect(() => { thetaRef.current = theta; }, [theta]);
+  useEffect(() => { diffuseRef.current = diffuse; }, [diffuse]);
+  useEffect(() => { mapSamplesRef.current = mapSamples; }, [mapSamples]);
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     pointerInteracting.current = { x: e.clientX, y: e.clientY };
     if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
@@ -92,6 +117,8 @@ export function Globe({
     };
   }, [handlePointerMove, handlePointerUp]);
 
+  // Globe initialises ONCE on mount — never re-created due to prop changes.
+  // All prop values are read from refs so they stay current without re-initing.
   useEffect(() => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -109,22 +136,22 @@ export function Globe({
         width,
         height: width,
         phi: 0,
-        theta,
-        dark,
-        diffuse,
-        mapSamples,
-        mapBrightness,
-        baseColor,
-        markerColor,
-        glowColor,
+        theta: thetaRef.current,
+        dark: darkRef.current,
+        diffuse: diffuseRef.current,
+        mapSamples: mapSamplesRef.current,
+        mapBrightness: mapBrightnessRef.current,
+        baseColor: baseColorRef.current,
+        markerColor: markerColorRef.current,
+        glowColor: glowColor, // stable — passed from module-level constant
         markerElevation: 0.01,
-        markers: markers.map((m) => ({
+        markers: markersRef.current.map((m) => ({
           location: m.location,
-          size: m.size ?? markerSize,
+          size: m.size ?? markerSizeRef.current,
           id: m.id,
         })),
         arcs: [],
-        arcColor: markerColor,
+        arcColor: markerColorRef.current,
         arcWidth: 0,
         arcHeight: 0,
         opacity: 0.85,
@@ -132,7 +159,7 @@ export function Globe({
 
       function animate() {
         if (!isPausedRef.current) {
-          phi += speed;
+          phi += speedRef.current;
           if (
             Math.abs(velocity.current.phi) > 0.0001 ||
             Math.abs(velocity.current.theta) > 0.0001
@@ -151,15 +178,15 @@ export function Globe({
         }
         globe!.update({
           phi: phi + phiOffsetRef.current + dragOffset.current.phi,
-          theta: theta + thetaOffsetRef.current + dragOffset.current.theta,
-          dark,
-          mapBrightness,
-          markerColor,
-          baseColor,
+          theta: thetaRef.current + thetaOffsetRef.current + dragOffset.current.theta,
+          dark: darkRef.current,
+          mapBrightness: mapBrightnessRef.current,
+          markerColor: markerColorRef.current,
+          baseColor: baseColorRef.current,
           markerElevation: 0.01,
-          markers: markers.map((m) => ({
+          markers: markersRef.current.map((m) => ({
             location: m.location,
-            size: m.size ?? markerSize,
+            size: m.size ?? markerSizeRef.current,
             id: m.id,
           })),
         });
@@ -187,19 +214,8 @@ export function Globe({
       if (animationId) cancelAnimationFrame(animationId);
       if (globe) globe.destroy();
     };
-  }, [
-    markers,
-    markerColor,
-    baseColor,
-    glowColor,
-    dark,
-    mapBrightness,
-    markerSize,
-    speed,
-    theta,
-    diffuse,
-    mapSamples,
-  ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps — globe initialises once and runs forever
 
   return (
     <div className={`relative aspect-square select-none ${className}`}>
