@@ -1066,8 +1066,8 @@ function RFQPanel({
   highWaterRef.current = Math.max(rawPct, highWaterRef.current);
   const completionPct = highWaterRef.current;
 
-  // Issue #4: enforce 70% minimum before finalizing
-  const canFinalize = completionPct >= 70 && (!!rfq.productName || !!rfqTitle);
+  // 70% gate removed — buyer can finalize at any completion percentage
+  const canFinalize = true;
 
   const hasBasicInfo =
     rfq.productName || rfq.category || rfq.intendedUse || rfq.description || rfq.moq;
@@ -1093,9 +1093,7 @@ function RFQPanel({
             {completionPct}%
           </span>
         </div>
-        {!canFinalize && completionPct > 0 && (
-          <p className="text-[10px] text-gray-400 mt-1.5">Complete 70% to finalize</p>
-        )}
+
       </div>
 
       {/* Panel body */}
@@ -1198,12 +1196,11 @@ function RFQPanel({
         )}
       </div>
 
-      {/* Finalize button — Issue #4: 70% gate */}
+      {/* Finalize button */}
       <div className="px-7 py-5 border-t border-gray-100">
         <button
           onClick={onFinalize}
-          disabled={finalized || isLoading || !canFinalize}
-          title={!canFinalize ? `Complete at least 70% of fields before finalizing (currently ${completionPct}%)` : undefined}
+          disabled={finalized || isLoading}
           className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#0D0D14] text-white rounded-xl text-sm font-semibold hover:bg-[#1a1a26] active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {finalized ? (
@@ -1216,14 +1213,7 @@ function RFQPanel({
             </>
           )}
         </button>
-        {!canFinalize && completionPct < 70 && (rfq.productName || rfqTitle) && (
-          <p className="text-xs text-gray-400 text-center mt-2">
-            {70 - completionPct}% more to go before finalizing
-          </p>
-        )}
-        {canFinalize && (
-          <p className="text-xs text-gray-400 text-center mt-2">Adds product to your sourcing list</p>
-        )}
+        <p className="text-xs text-gray-400 text-center mt-2">Adds product to your sourcing list</p>
       </div>
     </div>
   );
