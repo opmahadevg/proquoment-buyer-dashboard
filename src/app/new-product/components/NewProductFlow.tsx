@@ -29,9 +29,10 @@ import {
 import { saveProduct } from '@/lib/productStore';
 import { submitRFQ, saveDraftRFQ, fetchDraftRFQ, deleteDraftRFQ } from '@/lib/services/procurementApi';
 import { useAuth } from '@/contexts/AuthContext';
+import ImageSearchStep from './ImageSearchStep';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type Step = 'intro' | 'transition' | 'choose' | 'upload' | 'builder';
+type Step = 'intro' | 'transition' | 'choose' | 'upload' | 'image-search' | 'builder';
 type RFQMethod = 'complete' | 'partial' | 'scratch';
 
 interface Message {
@@ -1972,6 +1973,8 @@ export default function NewProductFlow() {
   const [productText, setProductText] = useState('');
   const [rfqMethod, setRfqMethod] = useState<RFQMethod>('scratch');
   const [draftId, setDraftId] = useState<string | undefined>();
+  // Stable RFQ ID generated once — links reference images to this RFQ before submission
+  const [rfqId] = useState(() => `rfq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
   // ── Check for draft query param on mount ──
   useEffect(() => {
@@ -1989,7 +1992,8 @@ export default function NewProductFlow() {
   const handleChoose = (method: RFQMethod) => {
     setRfqMethod(method);
     if (method === 'scratch') {
-      setStep('builder');
+      // scratch → image search step first, then builder
+      setStep('image-search');
     } else {
       // complete or partial → show upload page
       setStep('upload');
@@ -2061,6 +2065,16 @@ export default function NewProductFlow() {
   }
   if (step === 'choose') {
     return <ChooseStep onNext={handleChoose} />;
+  }
+  if (step === 'image-search') {
+    return (
+      <ImageSearchStep
+        productText={productText}
+        rfqId={rfqId}
+        onNext={() => setStep('builder')}
+        onSkip={() => setStep('builder')}
+      />
+    );
   }
   if (step === 'upload') {
     return (
