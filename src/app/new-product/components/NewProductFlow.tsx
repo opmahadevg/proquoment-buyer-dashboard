@@ -42,6 +42,7 @@ interface Message {
   options?: string[];
   multiSelect?: boolean; // Issue #8 — multi-select chip support
   isStreaming?: boolean;
+  images?: { url: string; title?: string }[];
 }
 
 interface RFQData {
@@ -930,22 +931,40 @@ function MessageBubble({
 
   if (msg.role === 'user') {
     return (
-      <div className="flex justify-end items-center gap-1.5 mb-6 group">
-        {onCorrect && (
-          <button
-            onClick={() => onCorrect(msg.text)}
-            title="Correct this answer"
-            className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] text-gray-400 hover:text-primary transition-all duration-150 px-2 py-1 rounded-lg hover:bg-gray-50 flex-shrink-0"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-            Correct
-          </button>
+      <div className="flex flex-col items-end gap-1.5 mb-6 group">
+        {msg.images && msg.images.length > 0 && (
+          <div className="flex flex-col items-end gap-2 mb-1">
+            {msg.images.map((img, i) => (
+              <div
+                key={i}
+                className="w-16 h-20 rounded-xl overflow-hidden border border-gray-200/90 shadow-sm bg-gray-50 flex-shrink-0"
+              >
+                <img
+                  src={img.url}
+                  alt={img.title || `Inspiration ${i + 1}`}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+          </div>
         )}
-        <div className="bg-[#F0F0F2] text-[#0D0D14] text-sm px-4 py-2 rounded-2xl max-w-[70%] leading-relaxed">
-          {msg.text}
+        <div className="flex justify-end items-center gap-1.5">
+          {onCorrect && (
+            <button
+              onClick={() => onCorrect(msg.text)}
+              title="Correct this answer"
+              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] text-gray-400 hover:text-primary transition-all duration-150 px-2 py-1 rounded-lg hover:bg-gray-50 flex-shrink-0"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              Correct
+            </button>
+          )}
+          <div className="bg-[#F0F0F2] text-[#0D0D14] text-sm px-4 py-2.5 rounded-2xl max-w-[80%] leading-relaxed">
+            {msg.text}
+          </div>
         </div>
       </div>
     );
@@ -1231,7 +1250,19 @@ function InfoRow({ label, value, bold }: { label: string; value: string; bold?: 
 }
 
 // ─── Step 4: RFQ Builder (Dual Gemini calls) ──────────────────────────────────
-function BuilderStep({ productText, productName, draftId: initialDraftId, tempRfqId }: { productText: string; productName: string; draftId?: string; tempRfqId?: string }) {
+function BuilderStep({
+  productText,
+  productName,
+  draftId: initialDraftId,
+  tempRfqId,
+  selectedImages = [],
+}: {
+  productText: string;
+  productName: string;
+  draftId?: string;
+  tempRfqId?: string;
+  selectedImages?: any[];
+}) {
   const router = useRouter();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1546,11 +1577,30 @@ function BuilderStep({ productText, productName, draftId: initialDraftId, tempRf
     if (initialized || !productText) return;
     setInitialized(true);
 
-    const userContent = `I want to source the following product: ${productText}`;
-    const initialHistory = [{ role: 'user', content: userContent }];
+    const initialMsgText = selectedImages.length > 0
+      ? `Here are my inspiration images for ${productText}`
+      : productText;
+
+    const imgList = selectedImages.map((img: any) => ({
+      url: img.thumbnail || img.original,
+      title: img.title || '',
+    }));
+
+    const userContent = selectedImages.length > 0
+      ? `Here are my inspiration images for ${productText}.\n\nInspiration images selected by buyer:\n${selectedImages.map((img: any, i: number) => `- Image ${i + 1}: ${img.title || 'Product sample'}`).join('\n')}\n\nPlease acknowledge these inspiration images in your first response.`
+      : `I want to source the following product: ${productText}`;
+
+    const initialHistory = [{ role: 'user', content: userContent, images: imgList.length > 0 ? imgList : undefined }];
     setConversationHistory(initialHistory);
 
-    setMessages([{ id: 'user-init', role: 'user', text: productText }]);
+    setMessages([
+      {
+        id: 'user-init',
+        role: 'user',
+        text: initialMsgText,
+        images: imgList.length > 0 ? imgList : undefined,
+      },
+    ]);
 
     const aiMsgId = `ai-${Date.now()}`;
     setMessages((prev) => [...prev, { id: aiMsgId, role: 'ai', text: '', isStreaming: true }]);
@@ -1560,7 +1610,7 @@ function BuilderStep({ productText, productName, draftId: initialDraftId, tempRf
       [{ role: 'system', content: CHAT_SYSTEM_PROMPT + confirmedSummary }, ...trimHistory(initialHistory)],
       { temperature: 0.7, max_tokens: 1024 }
     );
-  }, [initialized, productText, sendStreamingMessage]); // rfqRef is a ref, no dep needed
+  }, [initialized, productText, selectedImages, sendStreamingMessage]); // rfqRef is a ref, no dep needed
 
   useEffect(() => {
     initializeConversation();

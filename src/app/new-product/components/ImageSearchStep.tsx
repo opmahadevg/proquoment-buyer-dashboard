@@ -20,7 +20,7 @@ interface SelectedImage extends ImageResult {
 interface ImageSearchStepProps {
   productText: string;
   rfqId: string;
-  onNext: () => void;
+  onNext: (selectedImages?: SelectedImage[]) => void;
   onSkip: () => void;
 }
 
@@ -233,7 +233,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
   };
 
   const handleSubmit = async () => {
-    if (selected.length === 0) { onNext(); return; }
+    if (selected.length === 0) { onNext([]); return; }
     setSaving(true);
     try {
       const payload = selected.map((s) => ({
@@ -252,7 +252,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
       // Non-blocking — still advance to builder
     } finally {
       setSaving(false);
-      onNext();
+      onNext(selected);
     }
   };
 
