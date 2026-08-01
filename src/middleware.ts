@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/sign-up-login', '/auth/callback', '/reset-password', '/api/test-email'];
+const PUBLIC_PATHS = ['/sign-up-login', '/auth/callback', '/reset-password', '/api/test-email', '/api/image-search', '/api/rfq-images'];
 
 function getProjectRef(url: string): string {
   return url.match(/https:\/\/([^.]+)\./)?.[1] ?? '';
