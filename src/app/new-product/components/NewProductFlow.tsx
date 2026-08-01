@@ -1231,7 +1231,7 @@ function InfoRow({ label, value, bold }: { label: string; value: string; bold?: 
 }
 
 // ─── Step 4: RFQ Builder (Dual Gemini calls) ──────────────────────────────────
-function BuilderStep({ productText, productName, draftId: initialDraftId }: { productText: string; productName: string; draftId?: string }) {
+function BuilderStep({ productText, productName, draftId: initialDraftId, tempRfqId }: { productText: string; productName: string; draftId?: string; tempRfqId?: string }) {
   const router = useRouter();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1633,7 +1633,7 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
         .join(', ');
       const specsStr = [productSpecStr, commercialSpecStr].filter(Boolean).join(' || ');
 
-      await submitRFQ({
+      const realId = await submitRFQ({
         product: title,
         qty: rfq.moq || 'TBD',
         value: 'TBD',
@@ -1642,9 +1642,22 @@ function BuilderStep({ productText, productName, draftId: initialDraftId }: { pr
         description: rfq.description || undefined,
         aiChat: conversationHistory,
       });
+      // Relink reference images: temp rfqId → real RFQ id
+      if (tempRfqId && realId) {
+        try {
+          await fetch('/api/rfq-images/relink', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tempId: tempRfqId, realId }),
+          });
+        } catch (e) {
+          console.warn('Reference image relink failed (non-blocking):', e);
+        }
+      }
     } catch (err) {
       console.error('Failed to submit RFQ to Admin', err);
     }
+
 
     // Delete draft on finalize
     if (draftId) {
@@ -2093,5 +2106,5 @@ export default function NewProductFlow() {
       />
     );
   }
-  return <BuilderStep productText={productText} productName={productName} draftId={draftId} />;
+  return <BuilderStep productText={productText} productName={productName} draftId={draftId} tempRfqId={rfqId} />;
 }

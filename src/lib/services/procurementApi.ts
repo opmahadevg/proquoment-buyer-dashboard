@@ -382,6 +382,8 @@ export async function submitRFQ(rfq: {
     buyer_id: userId, // Always stamp with the authenticated buyer's ID
   });
   if (error) throw error;
+  return id; // Return real RFQ id for reference image relinking
+
 
   const extras = [
     rfq.specs && `Specs: ${rfq.specs}`,
