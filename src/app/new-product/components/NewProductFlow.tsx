@@ -25,6 +25,10 @@ import {
   Circle,
   CircleDotDashed,
   Save,
+  AlertTriangle,
+  ScanSearch,
+  Pencil,
+  RotateCcw,
 } from 'lucide-react';
 import { saveProduct } from '@/lib/productStore';
 import { submitRFQ, saveDraftRFQ, fetchDraftRFQ, deleteDraftRFQ } from '@/lib/services/procurementApi';
@@ -32,7 +36,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import ImageSearchStep from './ImageSearchStep';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type Step = 'intro' | 'transition' | 'choose' | 'upload' | 'image-search' | 'builder';
+type Step = 'intro' | 'transition' | 'choose' | 'upload' | 'extracting' | 'review' | 'image-search' | 'builder';
 type RFQMethod = 'complete' | 'partial' | 'scratch';
 
 interface Message {
@@ -56,6 +60,7 @@ interface RFQData {
   commercialTerms: { label: string; value: string; pending?: boolean }[]; // Issue #5 #6
   ambiguities: string[];
   categoryRelevantFields: string[]; // Issue #2 — dynamic field filtering
+  missingFields?: string[]; // Fields not found in uploaded documents
 }
 
 // ─── System prompt for conversational text (NO JSON) ─────────────────────────
@@ -1256,19 +1261,40 @@ function BuilderStep({
   draftId: initialDraftId,
   tempRfqId,
   selectedImages = [],
+  prefilledRfq,
 }: {
   productText: string;
   productName: string;
   draftId?: string;
   tempRfqId?: string;
   selectedImages?: any[];
+  /** Pre-extracted RFQ data from uploaded files — merged into initial state */
+  prefilledRfq?: Partial<RFQData>;
 }) {
   const router = useRouter();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [rfqTitle, setRfqTitle] = useState(productName || 'New Product RFQ');
-  const [rfq, setRfq] = useState<RFQData>({ ...EMPTY_RFQ });
+  // If prefilledRfq provided (from file upload), merge into EMPTY_RFQ so AI only asks about missing fields
+  const [rfq, setRfq] = useState<RFQData>(() => {
+    if (!prefilledRfq) return { ...EMPTY_RFQ };
+    return {
+      ...EMPTY_RFQ,
+      ...prefilledRfq,
+      specifications: prefilledRfq.specifications?.length
+        ? prefilledRfq.specifications
+        : EMPTY_RFQ.specifications,
+      manufacturingNotes: prefilledRfq.manufacturingNotes?.length
+        ? prefilledRfq.manufacturingNotes
+        : EMPTY_RFQ.manufacturingNotes,
+      commercialTerms: prefilledRfq.commercialTerms?.length
+        ? prefilledRfq.commercialTerms
+        : EMPTY_RFQ.commercialTerms,
+      categoryRelevantFields: prefilledRfq.categoryRelevantFields || [],
+      ambiguities: prefilledRfq.ambiguities || [],
+    };
+  });
   const rfqRef = useRef<RFQData>(rfq);
   useEffect(() => { rfqRef.current = rfq; }, [rfq]);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -1586,9 +1612,16 @@ function BuilderStep({
       title: img.title || '',
     }));
 
+    // If prefilled data exists, tell the AI what was already extracted from uploaded files
+    const prefilledContext = prefilledRfq
+      ? `\n\nIMPORTANT: The buyer has already uploaded documents. The following fields were AUTOMATICALLY EXTRACTED from those files and are pre-confirmed. DO NOT re-ask about these fields:\n${buildConfirmedFieldsSummary(rfqRef.current)}\n\nOnly ask about the fields listed in missingFields or any other fields still pending.`
+      : '';
+
     const userContent = selectedImages.length > 0
       ? `Here are my inspiration images for ${productText}.\n\nInspiration images selected by buyer:\n${selectedImages.map((img: any, i: number) => `- Image ${i + 1}: ${img.title || 'Product sample'}`).join('\n')}\n\nPlease acknowledge these inspiration images in your first response.`
-      : `I want to source the following product: ${productText}`;
+      : prefilledRfq
+        ? `I have uploaded documents for my RFQ. Key details have been extracted. Please help me fill in the remaining missing fields: ${(prefilledRfq.missingFields || []).join(', ') || 'Please review and ask about any unclear specifications.'}`
+        : `I want to source the following product: ${productText}`;
 
     const initialHistory = [{ role: 'user', content: userContent, images: imgList.length > 0 ? imgList : undefined }];
     setConversationHistory(initialHistory);
@@ -1607,10 +1640,10 @@ function BuilderStep({
 
     const confirmedSummary = buildConfirmedFieldsSummary(rfqRef.current);
     sendStreamingMessage(
-      [{ role: 'system', content: CHAT_SYSTEM_PROMPT + confirmedSummary }, ...trimHistory(initialHistory)],
+      [{ role: 'system', content: CHAT_SYSTEM_PROMPT + confirmedSummary + prefilledContext }, ...trimHistory(initialHistory)],
       { temperature: 0.7, max_tokens: 1024 }
     );
-  }, [initialized, productText, selectedImages, sendStreamingMessage]); // rfqRef is a ref, no dep needed
+  }, [initialized, productText, selectedImages, sendStreamingMessage, prefilledRfq]); // rfqRef is a ref, no dep needed
 
   useEffect(() => {
     initializeConversation();
@@ -1874,6 +1907,8 @@ function deriveProductName(text: string): string {
 }
 
 // ─── Step: Upload RFQ files ───────────────────────────────────────────────────
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
+
 function UploadStep({
   method,
   onBack,
@@ -1887,20 +1922,35 @@ function UploadStep({
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [sizeError, setSizeError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const totalSizeMb = (totalSize / 1024 / 1024).toFixed(1);
+  const isOverLimit = totalSize > MAX_UPLOAD_BYTES;
 
   const addFiles = (incoming: FileList | null) => {
     if (!incoming) return;
+    setSizeError(null);
     const accepted = Array.from(incoming).filter((f) =>
       /\.(pdf|doc|docx|png|jpg|jpeg|webp|gif)$/i.test(f.name)
     );
-    setFiles((prev) => {
-      const existing = new Set(prev.map((f) => f.name));
-      return [...prev, ...accepted.filter((f) => !existing.has(f.name))];
-    });
+    const newFiles = [...files];
+    const existing = new Set(files.map((f) => f.name));
+    for (const f of accepted) {
+      if (!existing.has(f.name)) newFiles.push(f);
+    }
+    const newTotal = newFiles.reduce((s, f) => s + f.size, 0);
+    if (newTotal > MAX_UPLOAD_BYTES) {
+      setSizeError(`Total size ${(newTotal / 1024 / 1024).toFixed(1)} MB exceeds the 50 MB limit. Remove some files.`);
+    }
+    setFiles(newFiles);
   };
 
-  const removeFile = (name: string) => setFiles((prev) => prev.filter((f) => f.name !== name));
+  const removeFile = (name: string) => {
+    setSizeError(null);
+    setFiles((prev) => prev.filter((f) => f.name !== name));
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -1927,18 +1977,42 @@ function UploadStep({
         {/* Left text */}
         <div className="flex-1 min-w-0 md:pt-2">
           <h1 className="text-2xl md:text-3xl font-bold text-[var(--foreground)] mb-3 leading-tight">
-            {isPartial ? 'Upload what you have' : 'Great! Thanks for preparing your RFQ'}
+            {isPartial ? 'Upload what you have' : 'Great! Upload your complete RFQ'}
           </h1>
           <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
             {isPartial
-              ? "Upload any existing specs, briefs, or reference images. We'll use AI to fill in the missing details."
-              : 'Upload your RFQ and other supporting files'}
+              ? "Upload any existing specs, briefs, or reference images. Our AI will extract what's there and ask about what's missing."
+              : 'Upload your complete RFQ document. AI will extract all specifications and pre-populate your RFQ automatically.'}
           </p>
+
+          {/* What we extract */}
+          <div className="mt-5 space-y-2">
+            <p className="text-xs font-semibold text-[var(--foreground)] uppercase tracking-wide">What we extract automatically:</p>
+            {[
+              'Product specifications & dimensions',
+              'Materials, grades & certifications',
+              'MOQ, pricing & commercial terms',
+              'Incoterms, ports & payment terms',
+              'Lead times & quality requirements',
+            ].map((item) => (
+              <div key={item} className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                <CheckCircle2 size={13} className="text-emerald-500 flex-shrink-0" />
+                {item}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
+            <ScanSearch size={15} className="text-blue-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-blue-700 leading-relaxed">
+              <strong>Powered by Google Lens + AI.</strong> Text-layer PDFs are parsed directly.
+              Scanned images use Google Lens OCR. Any missing fields will be filled via AI chat.
+            </p>
+          </div>
 
           {isPartial && (
             <p className="text-xs text-[var(--muted-foreground)] mt-4 italic">
-              Don't have anything? Click "I don't have anything yet" to skip straight to the AI
-              builder.
+              Don&apos;t have anything? Skip straight to the AI builder below.
             </p>
           )}
         </div>
@@ -1953,21 +2027,25 @@ function UploadStep({
             }}
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
-            className={`flex flex-col items-center justify-center gap-3 h-64 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-150 ${
+            className={`flex flex-col items-center justify-center gap-3 h-56 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-150 ${
               dragging
                 ? 'border-primary bg-[var(--secondary)] scale-[1.01]'
-                : 'border-[var(--border)] bg-[var(--muted)]/40 hover:border-primary/50 hover:bg-[var(--secondary)]/50'
+                : isOverLimit
+                  ? 'border-red-300 bg-red-50'
+                  : 'border-[var(--border)] bg-[var(--muted)]/40 hover:border-primary/50 hover:bg-[var(--secondary)]/50'
             }`}
           >
-            <div className="w-12 h-12 rounded-full bg-white border border-[var(--border)] flex items-center justify-center shadow-sm">
-              <UploadCloud size={22} className="text-[var(--muted-foreground)]" />
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-sm border ${
+              isOverLimit ? 'bg-red-50 border-red-200' : 'bg-white border-[var(--border)]'
+            }`}>
+              <UploadCloud size={22} className={isOverLimit ? 'text-red-400' : 'text-[var(--muted-foreground)]'} />
             </div>
             <div className="text-center">
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                Choose files to upload
+                {files.length > 0 ? 'Add more files' : 'Click or drag to upload'}
               </p>
               <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                We support PDF, DOC, DOCX, and images
+                PDF, DOC, DOCX, PNG, JPG — max 50 MB total
               </p>
             </div>
             <input
@@ -1979,6 +2057,26 @@ function UploadStep({
               onChange={(e) => addFiles(e.target.files)}
             />
           </div>
+
+          {/* Size indicator */}
+          {files.length > 0 && (
+            <div className="mt-2 flex items-center justify-between px-1">
+              <span className="text-xs text-[var(--muted-foreground)]">{files.length} file{files.length !== 1 ? 's' : ''}</span>
+              <span className={`text-xs font-semibold ${
+                isOverLimit ? 'text-red-500' : totalSize > MAX_UPLOAD_BYTES * 0.8 ? 'text-amber-500' : 'text-[var(--muted-foreground)]'
+              }`}>
+                {totalSizeMb} / 50 MB
+              </span>
+            </div>
+          )}
+
+          {/* Size error */}
+          {sizeError && (
+            <div className="mt-2 flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+              <AlertTriangle size={13} className="text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-red-600">{sizeError}</p>
+            </div>
+          )}
 
           {/* File list */}
           {files.length > 0 && (
@@ -1994,7 +2092,7 @@ function UploadStep({
                     {(f.size / 1024).toFixed(0)} KB
                   </span>
                   <button
-                    onClick={() => removeFile(f.name)}
+                    onClick={(e) => { e.stopPropagation(); removeFile(f.name); }}
                     className="text-[var(--muted-foreground)] hover:text-red-500 transition-colors flex-shrink-0"
                   >
                     <X size={13} />
@@ -2017,11 +2115,463 @@ function UploadStep({
           <span className="sm:hidden">Skip</span>
         </button>
         <button
-          onClick={() => onSubmit(files)}
-          className="px-5 md:px-7 py-2.5 rounded-full bg-[var(--muted)]/60 hover:bg-[var(--muted)] text-sm font-semibold text-[var(--foreground)] border border-[var(--border)] hover:border-primary/30 transition-all duration-150 disabled:opacity-40"
+          onClick={() => !isOverLimit && onSubmit(files)}
+          disabled={files.length === 0 || isOverLimit}
+          className="flex items-center gap-2 px-5 md:px-7 py-2.5 rounded-full bg-primary text-white text-sm font-semibold hover:bg-[#2e29c4] active:scale-95 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Submit
+          <ScanSearch size={15} /> Extract & Analyse
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step: Extracting (animated progress screen) ──────────────────────────────
+const EXTRACTION_TASKS = [
+  { id: '1', label: 'Reading uploaded documents', detail: 'Parsing PDF text layers & images' },
+  { id: '2', label: 'Extracting text & tables', detail: 'Identifying specifications and figures' },
+  { id: '3', label: 'Running AI analysis', detail: 'Recognizing product fields with OpenRouter' },
+  { id: '4', label: 'Building your RFQ', detail: 'Structuring data into Proquoment format' },
+];
+
+function ExtractionStep({
+  files,
+  method,
+  onComplete,
+  onError,
+}: {
+  files: File[];
+  method: RFQMethod;
+  onComplete: (rfqData: Partial<RFQData>, extractedText: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [activeTask, setActiveTask] = useState('1');
+  const [statuses, setStatuses] = useState<Record<string, TaskStatus>>({
+    '1': 'in-progress',
+    '2': 'pending',
+    '3': 'pending',
+    '4': 'pending',
+  });
+  const [statusMessage, setStatusMessage] = useState('Starting extraction…');
+  const didRun = useRef(false);
+
+  useEffect(() => {
+    if (didRun.current) return;
+    didRun.current = true;
+
+    const run = async () => {
+      const advance = (done: string, next: string | null, msg: string) => {
+        setStatuses((p) => ({
+          ...p,
+          [done]: 'completed',
+          ...(next ? { [next]: 'in-progress' } : {}),
+        }));
+        if (next) setActiveTask(next);
+        setStatusMessage(msg);
+      };
+
+      try {
+        // Task 1: build formData
+        await new Promise((r) => setTimeout(r, 600));
+        advance('1', '2', `Extracting from ${files.length} file${files.length !== 1 ? 's' : ''}…`);
+
+        const formData = new FormData();
+        files.forEach((f) => formData.append('files', f));
+
+        // Task 2: upload + extraction starts
+        await new Promise((r) => setTimeout(r, 500));
+        advance('2', '3', 'AI is analysing your documents…');
+
+        const res = await fetch('/api/extract-rfq', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          onError(data.error || 'Extraction failed. Please try again.');
+          return;
+        }
+
+        // Task 3 → 4
+        advance('3', '4', 'Structuring RFQ fields…');
+        await new Promise((r) => setTimeout(r, 600));
+        advance('4', null, `Done! Extracted ${data.filesProcessed} file${data.filesProcessed !== 1 ? 's' : ''}.`);
+
+        await new Promise((r) => setTimeout(r, 700));
+        onComplete(data.rfqData as Partial<RFQData>, data.extractedText || '');
+      } catch (err: any) {
+        onError(err?.message || 'An unexpected error occurred during extraction.');
+      }
+    };
+
+    run();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="relative min-h-screen bg-white flex flex-col md:flex-row overflow-hidden">
+      {/* Left */}
+      <div className="flex flex-col justify-center px-5 md:px-16 w-full md:w-[42%] pt-16 pb-6 md:pt-0 md:pb-0 md:min-h-screen">
+        <motion.div
+          initial={{ opacity: 0, x: -16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, ease: [0.2, 0.65, 0.3, 0.9] }}
+        >
+          <div className="flex items-center gap-2 mb-5">
+            <motion.span
+              className="w-2 h-2 rounded-full bg-primary"
+              animate={{ opacity: [1, 0.3, 1] }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <span className="text-xs font-semibold text-primary uppercase tracking-widest">
+              Proquoment AI Agent
+            </span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold text-[var(--foreground)] mb-1 leading-tight">
+            Extracting your RFQ
+          </h1>
+          <h2 className="text-base text-primary font-medium mb-4 truncate max-w-xs">
+            {files.map((f) => f.name).join(', ')}
+          </h2>
+          <p className="text-sm text-[var(--muted-foreground)]">{statusMessage}</p>
+        </motion.div>
+      </div>
+
+      {/* Right: task card */}
+      <div className="flex-1 flex items-center justify-center px-5 md:px-10 py-8 md:py-20">
+        <motion.div
+          className="w-full max-w-sm bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15, ease: [0.2, 0.65, 0.3, 0.9] }}
+        >
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2.5">
+            <motion.div
+              className="w-1.5 h-1.5 rounded-full bg-primary"
+              animate={{ opacity: [1, 0.3, 1] }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <span className="text-xs font-medium text-[var(--muted-foreground)]">
+              Extraction in progress…
+            </span>
+          </div>
+          <div className="p-4 space-y-0.5">
+            {EXTRACTION_TASKS.map((task) => {
+              const status = statuses[task.id];
+              const isActive = status === 'in-progress';
+              const isDone = status === 'completed';
+              return (
+                <div key={task.id} className="relative">
+                  {task.id !== '4' && (
+                    <div className="absolute left-[15px] top-[26px] bottom-0 w-px border-l border-dashed border-gray-200" />
+                  )}
+                  <div className={`flex items-start gap-3 px-2 py-1.5 rounded-lg transition-colors duration-300 ${isActive ? 'bg-blue-50/60' : ''}`}>
+                    <div className="mt-0.5 flex-shrink-0">
+                      <StatusIcon status={status} size={15} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm leading-snug transition-colors duration-300 ${
+                        isDone ? 'text-gray-400 line-through' : isActive ? 'text-[var(--foreground)] font-medium' : 'text-gray-400'
+                      }`}>
+                        {task.label}
+                      </p>
+                      <AnimatePresence>
+                        {isActive && (
+                          <motion.p
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="text-xs text-[var(--muted-foreground)] mt-0.5 overflow-hidden"
+                          >
+                            {task.detail}
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    <AnimatePresence>
+                      {isDone && (
+                        <motion.span
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="flex-shrink-0 text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded mt-0.5"
+                        >
+                          done
+                        </motion.span>
+                      )}
+                      {isActive && (
+                        <motion.span
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="flex-shrink-0 text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5"
+                        >
+                          running
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step: Review extracted RFQ (complete + partial with data) ────────────────
+function ReviewStep({
+  rfqData,
+  method,
+  onSubmit,
+  onRefineWithAI,
+  onBack,
+  productText,
+}: {
+  rfqData: Partial<RFQData>;
+  method: RFQMethod;
+  onSubmit: () => void;
+  onRefineWithAI: () => void;
+  onBack: () => void;
+  productText: string;
+}) {
+  const [editedRfq, setEditedRfq] = useState<Partial<RFQData>>(rfqData);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const allSpecs = editedRfq.specifications || [];
+  const allNotes = editedRfq.manufacturingNotes || [];
+  const allCommercial = editedRfq.commercialTerms || [];
+  const missingFields = editedRfq.missingFields || [];
+
+  const filledSpecs = allSpecs.filter((s) => !s.pending).length;
+  const filledNotes = allNotes.filter((n) => !n.pending).length;
+  const filledCommercial = allCommercial.filter((c) => !c.pending).length;
+  const totalFilled = filledSpecs + filledNotes + filledCommercial +
+    (editedRfq.productName ? 1 : 0) + (editedRfq.moq ? 1 : 0) + (editedRfq.category ? 1 : 0);
+  const totalFields = allSpecs.length + allNotes.length + allCommercial.length + 3;
+  const completionPct = totalFields > 0 ? Math.round((totalFilled / totalFields) * 100) : 0;
+
+  const startEdit = (key: string, current: string) => {
+    setEditingField(key);
+    setEditValue(current);
+  };
+
+  const commitEdit = () => {
+    if (!editingField) return;
+    const [section, label] = editingField.split('::');
+    if (section === 'basic') {
+      setEditedRfq((prev) => ({ ...prev, [label]: editValue }));
+    } else {
+      const sectionKey = section as 'specifications' | 'manufacturingNotes' | 'commercialTerms';
+      setEditedRfq((prev) => ({
+        ...prev,
+        [sectionKey]: (prev[sectionKey] || []).map((item) =>
+          item.label === label ? { ...item, value: editValue, pending: false } : item
+        ),
+      }));
+    }
+    setEditingField(null);
+  };
+
+  const EditableField = ({ sectionKey, label, value, pending }: {
+    sectionKey: string; label: string; value: string; pending?: boolean;
+  }) => {
+    const key = `${sectionKey}::${label}`;
+    const isEditing = editingField === key;
+    return (
+      <li className="flex items-start gap-2 text-sm leading-snug group">
+        <span className="text-gray-400 flex-shrink-0 mt-0.5">•</span>
+        {isEditing ? (
+          <div className="flex-1 flex items-center gap-2">
+            <input
+              autoFocus
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingField(null); }}
+              className="flex-1 text-sm border border-primary rounded-lg px-2 py-1 outline-none"
+            />
+            <button onClick={commitEdit} className="text-xs text-primary font-semibold">Save</button>
+            <button onClick={() => setEditingField(null)} className="text-xs text-gray-400">✕</button>
+          </div>
+        ) : (
+          <span className={`flex-1 ${pending ? 'text-gray-400 italic' : 'text-[#0D0D14]'}`}>
+            <span className="font-semibold">{label}:</span>{' '}
+            {pending ? '(Not found in document)' : value}
+            {!pending && (
+              <button
+                onClick={() => startEdit(key, value)}
+                className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-primary"
+              >
+                <Pencil size={11} />
+              </button>
+            )}
+          </span>
+        )}
+      </li>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 md:px-8 pt-4 md:pt-6 pb-4 border-b border-gray-100">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-sm text-[var(--foreground)] hover:text-primary transition-colors"
+        >
+          <span className="text-base">‹</span> Back
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-[var(--muted-foreground)]">
+            {completionPct}% extracted
+          </span>
+          <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${completionPct}%`, backgroundColor: completionPct >= 70 ? '#16a34a' : '#3B35E8' }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-4 md:px-8 py-6 md:py-8">
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 size={18} className="text-emerald-500" />
+              <h1 className="text-xl md:text-2xl font-bold text-[var(--foreground)]">
+                Review Extracted RFQ
+              </h1>
+            </div>
+            <p className="text-sm text-[var(--muted-foreground)] ml-7">
+              {method === 'complete'
+                ? 'AI extracted the following from your uploaded documents. Review and edit any field before submitting.'
+                : 'Here\'s what we found in your documents. Click "Refine with AI" to fill in the missing fields via chat.'}
+            </p>
+          </div>
+
+          {/* Basic Info */}
+          <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-4">
+            <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">Product Overview</p>
+            <div className="space-y-2">
+              {[
+                { key: 'basic::productName', label: 'Product Name', value: editedRfq.productName || '' },
+                { key: 'basic::category', label: 'Category', value: editedRfq.category || '' },
+                { key: 'basic::moq', label: 'MOQ', value: editedRfq.moq || '' },
+                { key: 'basic::intendedUse', label: 'Intended Use', value: editedRfq.intendedUse || '' },
+              ].filter((f) => f.value).map(({ key, label, value }) => {
+                const isEditing = editingField === key;
+                return (
+                  <div key={key} className="flex items-center gap-2 text-sm group">
+                    <span className="text-[var(--muted-foreground)] w-28 flex-shrink-0 text-xs">{label}:</span>
+                    {isEditing ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <input
+                          autoFocus
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingField(null); }}
+                          className="flex-1 text-sm border border-primary rounded-lg px-2 py-1 outline-none"
+                        />
+                        <button onClick={commitEdit} className="text-xs text-primary font-semibold">Save</button>
+                        <button onClick={() => setEditingField(null)} className="text-xs text-gray-400">✕</button>
+                      </div>
+                    ) : (
+                      <span className="flex-1 font-semibold text-[#0D0D14]">
+                        {value}
+                        <button
+                          onClick={() => startEdit(key, value)}
+                          className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-primary"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {editedRfq.description && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <p className="text-xs text-[var(--muted-foreground)] font-semibold mb-1">Description</p>
+                <p className="text-xs text-gray-600 leading-relaxed">{editedRfq.description}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Specifications */}
+          {allSpecs.length > 0 && (
+            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-4">
+              <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">Specifications</p>
+              <ul className="space-y-2">
+                {allSpecs.map((spec) => (
+                  <EditableField key={spec.label} sectionKey="specifications" label={spec.label} value={spec.value} pending={spec.pending} />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Manufacturing Notes */}
+          {allNotes.length > 0 && (
+            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-4">
+              <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">Manufacturing Notes</p>
+              <ul className="space-y-2">
+                {allNotes.map((note) => (
+                  <EditableField key={note.label} sectionKey="manufacturingNotes" label={note.label} value={note.value} pending={note.pending} />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Commercial Terms */}
+          {allCommercial.length > 0 && (
+            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-4">
+              <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">Commercial Terms</p>
+              <ul className="space-y-2">
+                {allCommercial.map((term) => (
+                  <EditableField key={term.label} sectionKey="commercialTerms" label={term.label} value={term.value} pending={term.pending} />
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Missing fields banner */}
+          {missingFields.length > 0 && (
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+              <AlertTriangle size={16} className="text-amber-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800 mb-1">
+                  {missingFields.length} field{missingFields.length !== 1 ? 's' : ''} not found in your documents
+                </p>
+                <p className="text-xs text-amber-700">
+                  {missingFields.join(' · ')}
+                </p>
+                <p className="text-xs text-amber-600 mt-1">
+                  Click "Refine with AI" to fill these in via a quick chat.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer actions */}
+      <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 md:px-8 py-4">
+        <div className="max-w-3xl mx-auto flex items-center gap-3">
+          <button
+            onClick={onRefineWithAI}
+            className="flex items-center gap-2 px-5 py-2.5 border border-[var(--border)] rounded-xl text-sm font-semibold text-[var(--foreground)] hover:border-primary/40 hover:bg-[var(--secondary)] transition-all"
+          >
+            <RotateCcw size={14} /> Refine with AI
+          </button>
+          <button
+            onClick={onSubmit}
+            className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-[#2e29c4] active:scale-[0.98] transition-all"
+          >
+            <CheckCircle size={15} /> Submit RFQ
+          </button>
+        </div>
+        <p className="text-xs text-center text-gray-400 mt-2 max-w-3xl mx-auto">Submitting notifies the Proquoment team to match you with verified suppliers</p>
       </div>
     </div>
   );
@@ -2039,13 +2589,17 @@ export default function NewProductFlow() {
   // Stable RFQ ID generated once — links reference images to this RFQ before submission
   const [rfqId] = useState(() => `rfq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
+  // ── Upload extraction state ──
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [extractedRfqData, setExtractedRfqData] = useState<Partial<RFQData> | null>(null);
+  const [extractedText, setExtractedText] = useState('');
+
   // ── Check for draft query param on mount ──
   useEffect(() => {
     const draft = searchParams.get('draft');
     if (draft) {
       setDraftId(draft);
       setStep('builder');
-      // productText will be restored from draft inside BuilderStep
       setProductText('(Resuming draft)');
     }
   }, [searchParams]);
@@ -2055,62 +2609,98 @@ export default function NewProductFlow() {
   const handleChoose = (method: RFQMethod) => {
     setRfqMethod(method);
     if (method === 'scratch') {
-      // scratch → image search step first, then builder
       setStep('image-search');
     } else {
-      // complete or partial → show upload page
       setStep('upload');
     }
   };
 
-  const handleUploadSubmit = async (files: File[]) => {
-    if (rfqMethod === 'complete') {
-      // Save a stub product and go to products list
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-      const title = deriveProductName(productText) || 'New Product';
-      await saveProduct({
-        id: `prod-rfq-${Date.now()}`,
-        name: title,
-        category: '',
-        description: productText,
-        moq: '',
-        specifications: [],
-        manufacturingNotes: [],
-        status: 'New Update',
-        stage: 'Quoting',
-        updated: dateStr,
-        image: '',
-        imageAlt: `${title} product`,
-      });
-
-      try {
-        const isDemo = user?.email ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(user.email) : false;
-        const buyerName = isDemo
-          ? 'Demo User'
-          : user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Enterprise Buyer';
-
-        await submitRFQ({
-          product: title,
-          qty: 'TBD',
-          value: 'TBD',
-          specs: 'Uploaded complete RFQ files.',
-          buyer: buyerName,
-        });
-      } catch (err) {
-        console.error('Failed to submit RFQ to Admin', err);
-      }
-
-      toast.success('RFQ submitted! Product added to your list.');
-      setTimeout(() => router.push('/products-list'), 1000);
-    } else {
-      // partial → go to AI builder
+  // Files submitted from UploadStep → go to extraction
+  const handleUploadSubmit = (files: File[]) => {
+    if (files.length === 0) {
+      // No files — skip to builder
       setStep('builder');
+      return;
     }
+    setUploadedFiles(files);
+    setStep('extracting');
+  };
+
+  // Extraction complete → show review
+  const handleExtractionComplete = (rfqData: Partial<RFQData>, text: string) => {
+    setExtractedRfqData(rfqData);
+    setExtractedText(text);
+    // Use extracted product name as productText if we don't have one yet
+    if (!productText || productText === '') {
+      setProductText(rfqData.productName || rfqData.description || 'Uploaded RFQ');
+    }
+    setStep('review');
+  };
+
+  // Extraction failed
+  const handleExtractionError = (message: string) => {
+    toast.error(message, { duration: 6000 });
+    setStep('upload'); // go back to upload
+  };
+
+  // From ReviewStep: "Submit RFQ" — uses extracted data
+  const handleReviewSubmit = async () => {
+    if (!extractedRfqData) return;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const title = extractedRfqData.productName || deriveProductName(productText) || 'New Product';
+
+    // Save to product store
+    await saveProduct({
+      id: `prod-rfq-${Date.now()}`,
+      name: title,
+      category: extractedRfqData.category || '',
+      description: extractedRfqData.description || '',
+      moq: extractedRfqData.moq || '',
+      specifications: extractedRfqData.specifications || [],
+      manufacturingNotes: extractedRfqData.manufacturingNotes || [],
+      status: 'New Update',
+      stage: 'Quoting',
+      updated: dateStr,
+      image: '',
+      imageAlt: `${title} product`,
+    });
+
+    // Submit to Supabase rfqs table
+    try {
+      const isDemo = user?.email ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(user.email) : false;
+      const buyerName = isDemo
+        ? 'Demo User'
+        : user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Enterprise Buyer';
+
+      const specsStr = (extractedRfqData.specifications || [])
+        .filter((s) => !s.pending)
+        .map((s) => `${s.label}: ${s.value}`)
+        .join(', ');
+      const commercialStr = (extractedRfqData.commercialTerms || [])
+        .filter((t) => !t.pending)
+        .map((t) => `${t.label}: ${t.value}`)
+        .join(' | ');
+
+      await submitRFQ({
+        product: title,
+        qty: extractedRfqData.moq || 'TBD',
+        value: (extractedRfqData.specifications?.find((s) => s.label === 'Target Unit Price')?.value) || 'TBD',
+        specs: [specsStr, commercialStr].filter(Boolean).join(' || ') || 'Extracted from uploaded documents.',
+        buyer: buyerName,
+        description: extractedRfqData.description,
+      });
+    } catch (err) {
+      console.error('[NewProductFlow] RFQ submit failed:', err);
+    }
+
+    toast.success('RFQ submitted! Product added to your list.');
+    setTimeout(() => router.push('/products-list'), 1000);
+  };
+
+  // From ReviewStep: "Refine with AI" — passes extracted data to builder
+  const handleRefineWithAI = () => {
+    setStep('builder');
   };
 
   if (step === 'intro') {
@@ -2144,17 +2734,46 @@ export default function NewProductFlow() {
       <UploadStep
         method={rfqMethod}
         onBack={() => setStep('choose')}
-        onSkip={() => {
-          if (rfqMethod === 'complete') {
-            setStep('choose');
-          } else {
-            // partial: skip upload → go straight to AI builder
-            setStep('builder');
-          }
-        }}
+        onSkip={() => setStep('builder')}
         onSubmit={handleUploadSubmit}
       />
     );
   }
-  return <BuilderStep productText={productText} productName={productName} draftId={draftId} tempRfqId={rfqId} />;
+  if (step === 'extracting') {
+    return (
+      <ExtractionStep
+        files={uploadedFiles}
+        method={rfqMethod}
+        onComplete={handleExtractionComplete}
+        onError={handleExtractionError}
+      />
+    );
+  }
+  if (step === 'review') {
+    return (
+      <>
+        <Toaster
+          position="top-right"
+          toastOptions={{ style: { fontSize: '13px', borderRadius: '10px', fontFamily: 'inherit' } }}
+        />
+        <ReviewStep
+          rfqData={extractedRfqData || {}}
+          method={rfqMethod}
+          onSubmit={handleReviewSubmit}
+          onRefineWithAI={handleRefineWithAI}
+          onBack={() => setStep('upload')}
+          productText={productText}
+        />
+      </>
+    );
+  }
+  return (
+    <BuilderStep
+      productText={productText || extractedText}
+      productName={productName}
+      draftId={draftId}
+      tempRfqId={rfqId}
+      prefilledRfq={extractedRfqData || undefined}
+    />
+  );
 }
