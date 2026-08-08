@@ -76,34 +76,40 @@ export default function AuthContent() {
         // Bootstrap a blank buyer_profiles row immediately
         // (also done server-side by DB trigger — this is a safety net)
         const supabase = createClient();
-        await supabase
-          .from('buyer_profiles')
-          .upsert(
-            {
-              id: result.user.id,
-              email: data.email,
-              organization_name: data.orgName || '',
-              verification_status: 'pending',
-              login_email: data.email,
-              login_password: data.password,
-            },
-            { onConflict: 'id' } // always update so login_password is never skipped
-          )
-          .catch(() => {}); // Non-fatal
+        try {
+          await supabase
+            .from('buyer_profiles')
+            .upsert(
+              {
+                id: result.user.id,
+                email: data.email,
+                organization_name: data.orgName || '',
+                verification_status: 'pending',
+                login_email: data.email,
+                login_password: data.password,
+              },
+              { onConflict: 'id' } // always update so login_password is never skipped
+            );
+        } catch {
+          // Non-fatal
+        }
 
         // Send a scoped welcome notification to this buyer only
-        await supabase
-          .from('notifications')
-          .insert({
-            target_dashboard: 'buyer',
-            type: 'admin_announcement',
-            title: 'Welcome to Proquoment! 🎉',
-            message:
-              'Your account is active. Submit your first RFQ to start sourcing from verified global suppliers.',
-            buyer_id: result.user.id,
-            read: false,
-          })
-          .catch(() => {}); // Non-fatal
+        try {
+          await supabase
+            .from('notifications')
+            .insert({
+              target_dashboard: 'buyer',
+              type: 'admin_announcement',
+              title: 'Welcome to Proquoment! 🎉',
+              message:
+                'Your account is active. Submit your first RFQ to start sourcing from verified global suppliers.',
+              buyer_id: result.user.id,
+              read: false,
+            });
+        } catch {
+          // Non-fatal
+        }
       }
 
       if (result?.session) {
