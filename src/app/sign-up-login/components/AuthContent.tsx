@@ -13,7 +13,6 @@ type AuthMode = 'login' | 'signup' | 'forgot';
 interface LoginForm {
   email: string;
   password: string;
-  pin: string;
 }
 interface SignupForm {
   name: string;
@@ -45,11 +44,6 @@ export default function AuthContent() {
   const handleLogin = async (data: LoginForm) => {
     setAuthError(null);
     setIsLoading(true);
-    if (data.pin !== '050620') {
-      setAuthError('Invalid access PIN. For demo access PIN, email proquoment@gmail.com');
-      setIsLoading(false);
-      return;
-    }
     try {
       await signIn(data.email, data.password);
       toast.success('Welcome back!');
@@ -340,25 +334,7 @@ export default function AuthContent() {
                     </p>
                   )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-[var(--foreground)] mb-1.5">
-                    Access PIN
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="6-digit PIN"
-                    maxLength={6}
-                    inputMode="numeric"
-                    autoComplete="off"
-                    {...loginForm.register('pin', { required: 'Access PIN is required' })}
-                    className="w-full px-3.5 py-2.5 border border-[var(--input)] rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all tracking-[0.3em] text-center font-mono"
-                  />
-                  {loginForm.formState.errors.pin && (
-                    <p className="text-xs text-red-500 mt-1">
-                      {loginForm.formState.errors.pin.message}
-                    </p>
-                  )}
-                </div>
+
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -396,13 +372,6 @@ export default function AuthContent() {
                 </button>
                 {showDemo && (
                   <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <div className="mb-3 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-center">
-                      <p className="text-[11px] font-semibold text-amber-800 mb-0.5">🔑 Demo Access PIN Required</p>
-                      <p className="text-[11px] text-amber-700">
-                        For demo access PIN, email us at{' '}
-                        <a href="mailto:proquoment@gmail.com" className="font-semibold underline">proquoment@gmail.com</a>
-                      </p>
-                    </div>
                     <p className="text-[11px] text-[var(--muted-foreground)] text-center mb-2">
                       Click an account to auto-fill email & password
                     </p>
