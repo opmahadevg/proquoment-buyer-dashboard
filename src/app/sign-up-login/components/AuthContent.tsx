@@ -106,15 +106,9 @@ export default function AuthContent() {
         }
       }
 
-      if (result?.session) {
-        toast.success('Account created! Welcome to Proquoment.');
-        router.push(next);
-        router.refresh();
-      } else {
-        toast.success('Account created! Check your email to confirm, then sign in.');
-        setMode('login');
-        loginForm.setValue('email', data.email);
-      }
+      toast.success('Account created! Welcome to Proquoment.');
+      router.push(next);
+      router.refresh();
     } catch (err: any) {
       setAuthError(err?.message || 'Sign up failed. Please try again.');
     } finally {

@@ -69,7 +69,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       password,
       options: {
         data: metadata,
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/`,
       },
     });
 
@@ -136,9 +135,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return user;
   };
 
-  const isEmailVerified = () => {
-    return user?.email_confirmed_at !== null;
-  };
+
 
   const getUserProfile = async () => {
     if (!user) return null;
@@ -159,7 +156,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signIn,
     signOut,
     getCurrentUser,
-    isEmailVerified,
     getUserProfile,
   };
 
