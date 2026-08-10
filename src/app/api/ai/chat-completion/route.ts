@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const MODEL = 'openai/gpt-oss-120b';
+const MODEL = 'openai/gpt-5.6-luna';
 
 // ─── SSE stream converter ──────────────────────────────────────────────────────
 function buildSSEStream(providerResponse: Response): NextResponse {
