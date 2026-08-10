@@ -2002,13 +2002,7 @@ function UploadStep({
             ))}
           </div>
 
-          <div className="mt-5 flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
-            <ScanSearch size={15} className="text-blue-500 mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-blue-700 leading-relaxed">
-              <strong>Powered by Google Lens + AI.</strong> Text-layer PDFs are parsed directly.
-              Scanned images use Google Lens OCR. Any missing fields will be filled via AI chat.
-            </p>
-          </div>
+
 
           {isPartial && (
             <p className="text-xs text-[var(--muted-foreground)] mt-4 italic">
@@ -2698,9 +2692,17 @@ export default function NewProductFlow() {
     setTimeout(() => router.push('/products-list'), 1000);
   };
 
-  // From ReviewStep: "Refine with AI" — passes extracted data to builder
+  // From ReviewStep: "Refine with AI" — set exact product name from extracted RFQ, then image-search → builder
   const handleRefineWithAI = () => {
-    setStep('builder');
+    // Prioritise the specific extracted product name over any generic intro text
+    const extractedName =
+      extractedRfqData?.productName ||
+      extractedRfqData?.description ||
+      productText;
+    if (extractedName && extractedName !== productText) {
+      setProductText(extractedName);
+    }
+    setStep('image-search');
   };
 
   if (step === 'intro') {

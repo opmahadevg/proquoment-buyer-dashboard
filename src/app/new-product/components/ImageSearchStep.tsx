@@ -2,7 +2,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X, Search, ChevronRight, Upload, SkipForward, Check, Loader2, ImageOff, GripVertical } from 'lucide-react';
+import {
+  Sparkles, X, Search, ChevronRight, Upload, SkipForward, Check,
+  Loader2, ImageOff, GripVertical,
+} from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ImageResult {
@@ -10,7 +13,6 @@ export interface ImageResult {
   title: string;
   thumbnail: string;
   original: string;
-  source: string;
 }
 
 interface SelectedImage extends ImageResult {
@@ -24,12 +26,12 @@ interface ImageSearchStepProps {
   onSkip: () => void;
 }
 
+
+
 // ─── Skeleton card ────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
-    <div className="rounded-xl overflow-hidden bg-[var(--muted)] animate-pulse">
-      <div className="w-full bg-[var(--border)]" style={{ aspectRatio: `${1 + Math.random()}` }} />
-    </div>
+    <div className="rounded-2xl overflow-hidden bg-[var(--muted)] animate-pulse aspect-[4/3]" />
   );
 }
 
@@ -47,6 +49,8 @@ function ImageCard({
 }) {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
+  // Try original first, fallback to thumbnail
+  const [src, setSrc] = useState(img.original || img.thumbnail);
 
   const handleClick = () => {
     if (isSelected) {
@@ -56,40 +60,57 @@ function ImageCard({
     }
   };
 
+  const handleError = () => {
+    if (src !== img.thumbnail) {
+      // Fallback from original → thumbnail
+      setSrc(img.thumbnail);
+    } else {
+      setErrored(true);
+    }
+  };
+
   return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className={`relative group rounded-xl overflow-hidden cursor-pointer border-2 transition-all duration-200 ${
+      className={`relative group rounded-2xl overflow-hidden cursor-pointer border-2 transition-all duration-200 ${
         isSelected
           ? 'border-[var(--primary)] shadow-lg shadow-primary/20'
-          : 'border-transparent hover:border-[var(--primary)]/40'
+          : 'border-transparent hover:border-[var(--primary)]/40 hover:shadow-md'
       }`}
       onClick={handleClick}
     >
-      {/* Image */}
-      {!errored ? (
-        <img
-          src={img.thumbnail}
-          alt={img.title}
-          className={`w-full h-full object-cover transition-all duration-300 ${
-            loaded ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{ minHeight: 80 }}
-          onLoad={() => setLoaded(true)}
-          onError={() => setErrored(true)}
-        />
-      ) : (
-        <div className="w-full bg-[var(--muted)] flex items-center justify-center" style={{ minHeight: 80 }}>
-          <ImageOff size={18} className="text-[var(--muted-foreground)]" />
-        </div>
-      )}
+      {/* Image container — consistent 4:3 aspect ratio with contain fit */}
+      <div
+        className="w-full bg-[#f5f5f5] flex items-center justify-center"
+        style={{ aspectRatio: '4/3' }}
+      >
+        {!errored ? (
+          <img
+            src={src}
+            alt={img.title}
+            className={`w-full h-full object-contain transition-all duration-300 ${
+              loaded ? 'opacity-100' : 'opacity-0'
+            }`}
+            onLoad={() => setLoaded(true)}
+            onError={handleError}
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-[var(--muted-foreground)]">
+            <ImageOff size={20} className="opacity-40" />
+            <span className="text-[10px] opacity-50">No preview</span>
+          </div>
+        )}
 
-      {!loaded && !errored && (
-        <div className="absolute inset-0 bg-[var(--muted)] animate-pulse" />
-      )}
+        {/* Loading pulse */}
+        {!loaded && !errored && (
+          <div className="absolute inset-0 bg-[var(--muted)] animate-pulse rounded-2xl" />
+        )}
+      </div>
+
+
 
       {/* Selected overlay */}
       <AnimatePresence>
@@ -107,9 +128,9 @@ function ImageCard({
         )}
       </AnimatePresence>
 
-      {/* Hover overlay */}
+      {/* Hover ring */}
       {!isSelected && (
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-200 rounded-2xl" />
       )}
     </motion.div>
   );
@@ -141,20 +162,29 @@ function SelectedRow({
       </div>
 
       {/* Thumbnail */}
-      <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-[var(--muted)] border border-[var(--border)]">
+      <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-[#f5f5f5] border border-[var(--border)] flex items-center justify-center">
         <img
-          src={item.thumbnail}
+          src={item.original || item.thumbnail}
           alt={item.title}
-          className="w-full h-full object-cover"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          className="w-full h-full object-contain"
+          onError={(e) => {
+            const t = e.target as HTMLImageElement;
+            if (t.src !== item.thumbnail) {
+              t.src = item.thumbnail;
+            } else {
+              t.style.display = 'none';
+            }
+          }}
         />
       </div>
 
       {/* Note input + remove */}
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-semibold text-[var(--foreground)] truncate mb-1.5">
-          Ref {index + 1}
-        </p>
+        <div className="flex items-center gap-1 mb-1.5">
+          <p className="text-[11px] font-semibold text-[var(--foreground)] truncate">
+            Ref {index + 1}
+          </p>
+        </div>
         <input
           type="text"
           placeholder="What do you like? (optional)"
@@ -186,6 +216,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
   const [error, setError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Auto-search on mount using product text
   useEffect(() => {
@@ -197,7 +228,15 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
 
   const doSearch = useCallback(async (q: string, skipRefine = false) => {
     if (!q.trim()) return;
+
+    // Cancel any in-flight request so stale results never overwrite fresh ones
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
+    setResults([]);        // clear old images immediately — no stale display
+    setRefinedQuery('');   // clear old refined-query badge
     setError('');
     setHasSearched(true);
     try {
@@ -205,6 +244,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q, skipRefine }),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error('Search failed');
       const data = await res.json();
@@ -212,12 +252,15 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
       if (data.refinedQuery && data.refinedQuery !== q) {
         setRefinedQuery(data.refinedQuery);
       }
-    } catch {
+    } catch (err: unknown) {
+      // Ignore aborted requests — user started a new search
+      if (err instanceof Error && err.name === 'AbortError') return;
       setError('Could not load images. Check your connection.');
     } finally {
       setLoading(false);
     }
   }, []);
+
 
   const handleSelect = (img: ImageResult) => {
     if (selected.length >= 8) return; // cap at 8
@@ -321,7 +364,12 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && doSearch(query, true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setActiveChip(null);
+                    doSearch(query, true);
+                  }
+                }}
                 placeholder="Describe what you're looking for…"
                 className="flex-1 text-sm bg-transparent outline-none text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]"
               />
@@ -358,6 +406,8 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
             </button>
           </div>
 
+
+
           {/* Refined query badge */}
           <AnimatePresence>
             {refinedQuery && refinedQuery !== query && (
@@ -365,7 +415,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                className="flex items-center gap-2 flex-wrap"
+                className="flex items-center gap-2 flex-wrap -mt-2"
               >
                 <span className="text-xs text-[var(--muted-foreground)]">AI refined to:</span>
                 <span
@@ -386,50 +436,53 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
             </div>
           )}
 
-          {/* Image grid */}
+          {/* ── Image grid ── */}
           {loading && !results.length ? (
-            <div className="columns-2 md:columns-3 gap-3 space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {Array.from({ length: 12 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="break-inside-avoid rounded-xl overflow-hidden bg-[var(--muted)] animate-pulse"
-                  style={{ height: `${100 + (i % 5) * 30}px` }}
-                />
+                <SkeletonCard key={i} />
               ))}
             </div>
           ) : results.length > 0 ? (
-            <motion.div
-              className="columns-2 md:columns-3 gap-3 space-y-3"
-              initial="hidden"
-              animate="visible"
-              variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
-            >
-              {results.map((img) => (
-                <motion.div
-                  key={img.position}
-                  className="break-inside-avoid mb-3"
-                  variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0 } }}
-                >
-                  <ImageCard
-                    img={img}
-                    isSelected={selectedPositions.has(img.position)}
-                    onSelect={handleSelect}
-                    onDeselect={handleDeselect}
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
+            <>
+              {/* Results count */}
+              <div className="flex items-center gap-2 -mb-2">
+                <span className="text-xs text-[var(--muted-foreground)]">
+                  {results.length} results · filtered for product photography
+                </span>
+              </div>
+
+              <motion.div
+                className="grid grid-cols-2 md:grid-cols-3 gap-3"
+                initial="hidden"
+                animate="visible"
+                variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
+              >
+                {results.map((img) => (
+                  <motion.div
+                    key={img.position}
+                    variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0 } }}
+                  >
+                    <ImageCard
+                      img={img}
+                      isSelected={selectedPositions.has(img.position)}
+                      onSelect={handleSelect}
+                      onDeselect={handleDeselect}
+                    />
+                  </motion.div>
+                ))}
+              </motion.div>
+            </>
           ) : hasSearched && !loading ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3 text-[var(--muted-foreground)]">
               <ImageOff size={32} className="opacity-40" />
-              <p className="text-sm">No images found. Try a different query.</p>
+              <p className="text-sm">No images found. Try a different query or remove a chip filter.</p>
             </div>
           ) : null}
 
-          {/* Load more hint */}
           {results.length >= 15 && (
             <p className="text-center text-xs text-[var(--muted-foreground)] py-2">
-              Showing top 15 results. Refine your search for different results.
+              Showing top 15 results · filtered for quality. Refine your search for different results.
             </p>
           )}
         </div>
@@ -525,8 +578,16 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
             {/* Thumbnails strip */}
             <div className="flex gap-1.5 flex-1 overflow-hidden">
               {selected.slice(0, 5).map((s) => (
-                <div key={s.position} className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 border border-[var(--border)]">
-                  <img src={s.thumbnail} alt="" className="w-full h-full object-cover" />
+                <div key={s.position} className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 border border-[var(--border)] bg-[#f5f5f5] flex items-center justify-center">
+                  <img
+                    src={s.original || s.thumbnail}
+                    alt=""
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      const t = e.target as HTMLImageElement;
+                      if (t.src !== s.thumbnail) t.src = s.thumbnail;
+                    }}
+                  />
                 </div>
               ))}
               {selected.length > 5 && (
