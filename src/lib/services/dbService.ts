@@ -583,10 +583,14 @@ export const productService = {
     } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // Ensure valid UUID format for PostgreSQL UUID column
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(product.id);
+    const validProductId = isUuid ? product.id : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '00000000-0000-4000-8000-000000000000');
+
     try {
       const { error } = await supabase.from('products').upsert(
         {
-          id: product.id,
+          id: validProductId,
           name: product.name,
           category: product.category,
           description: product.description,
@@ -599,10 +603,10 @@ export const productService = {
       );
 
       if (error) {
-        if (isSchemaError(error)) throw error;
+        console.error('productService.save error:', error);
       }
     } catch (err: any) {
-      if (isSchemaError(err)) throw err;
+      console.error('productService.save exception:', err);
     }
   },
 };

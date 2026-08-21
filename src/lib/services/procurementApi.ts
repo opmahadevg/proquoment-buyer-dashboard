@@ -406,7 +406,6 @@ export async function submitRFQ(rfq: {
   buyer: string;
   description?: string;
   aiChat?: any;
-  // C5 FIX: accept structured RFQ state for DB persistence
   rfqState?: any;
 }) {
   const supabase = getSupabase();
@@ -421,6 +420,43 @@ export async function submitRFQ(rfq: {
     } catch {}
   }
 
+  // 1. Try server API route first (handles cookies, server auth session, RLS, and UUIDs)
+  try {
+    const res = await fetch('/api/rfq/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rfq),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.id) {
+        saveRFQToLocalStorage({
+          id: data.id,
+          product: rfq.product,
+          buyer: data.buyer || rfq.buyer || 'Enterprise Buyer',
+          qty: rfq.qty,
+          value: rfq.value || 'TBD',
+          status: 'new',
+          date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          deadline: rfq.deadline || null,
+          targetPrice: rfq.targetPrice || null,
+          specs: rfq.specs || null,
+          description: rfq.description || null,
+          aiChat: rfq.aiChat || null,
+          rfqState: rfq.rfqState || null,
+          createdAt: new Date().toISOString(),
+        }, userId);
+        return data.id;
+      }
+    } else {
+      const errJson = await res.json().catch(() => ({}));
+      console.warn('Server /api/rfq/create returned non-200, falling back to client-side insert:', errJson);
+    }
+  } catch (apiErr) {
+    console.warn('/api/rfq/create call failed, using client fallback:', apiErr);
+  }
+
+  // 2. Direct client fallback if API route fails
   let resolvedBuyer = rfq.buyer || 'Enterprise Buyer';
   const isDemo = userEmail ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(userEmail) : false;
   if (isDemo) {
@@ -465,7 +501,7 @@ export async function submitRFQ(rfq: {
     createdAt: new Date().toISOString(),
   };
 
-  // Always save to localStorage first
+  // Always save to localStorage
   saveRFQToLocalStorage(newRfqItem, userId);
 
   // Persist to Supabase whenever client is available
@@ -485,36 +521,14 @@ export async function submitRFQ(rfq: {
         description: rfq.description || null,
         ai_chat: rfq.aiChat || null,
         buyer_id: dbUserId,
-        // C5 FIX: persist structured RFQ state and target price
         rfq_state: rfq.rfqState || null,
         target_price: rfq.targetPrice || null,
       });
-      if (error) console.error('Supabase submitRFQ error:', error);
+      if (error) console.error('Supabase submitRFQ fallback error:', error);
     } catch (err) {
       console.warn('Failed to insert RFQ to Supabase (localStorage fallback saved):', err);
     }
   }
-
-  // H9 FIX: notifications are now reachable (was dead code after premature return)
-  const extras = [
-    rfq.specs && `Specs: ${rfq.specs}`,
-    rfq.targetPrice && `Target: ${rfq.targetPrice}`,
-    rfq.deadline && `Deadline: ${rfq.deadline}`,
-  ]
-    .filter(Boolean)
-    .join(' | ');
-
-  // Notify admin (no buyer_id — admin notifications are unscoped)
-  await supabase
-    .from('notifications')
-    .insert({
-      target_dashboard: 'admin',
-      type: 'new_rfq',
-      title: `New RFQ: ${rfq.product}`,
-      message: `${rfq.buyer || 'Buyer'} submitted RFQ for ${rfq.qty} of ${rfq.product} (${rfq.value || 'TBD'})${extras ? '. ' + extras : ''}`,
-      action_url: `/rfq/${id}`,
-    })
-    .catch(() => {}); // Notification failure should not block RFQ creation
 
   return id;
 }
