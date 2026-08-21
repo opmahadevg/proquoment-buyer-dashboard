@@ -29,51 +29,32 @@ const EXTRACTION_SYSTEM_PROMPT = `You are a B2B procurement data extraction spec
 
 You will receive raw text extracted from uploaded documents (PDFs, spreadsheets, images) that a buyer has provided as their RFQ (Request for Quotation) or product specification sheet.
 
-Extract ALL available product and procurement information and return ONLY a valid JSON object. No explanations, no text, no markdown fences — just raw JSON.
+Extract ALL available product and procurement information and return ONLY a valid JSON object matching the new ProvenancedField schema. No explanations, no text, no markdown fences — just raw JSON.
 
 The JSON must have this exact structure:
 {
-  "productName": "string — concise product title",
-  "category": "string — industry category (e.g. Apparel & Textiles, Electronics, Food & Beverage)",
-  "intendedUse": "string — what this product is used for",
-  "description": "string — complete 2-3 sentence professional supplier-facing product brief synthesizing all extracted information",
-  "moq": "string — minimum order quantity with units (e.g. '5,000 pcs', '500 kg')",
-  "specifications": [
-    { "label": "Materials / Grade", "value": "string", "pending": boolean },
-    { "label": "Target Unit Price", "value": "string", "pending": boolean },
-    { "label": "Packaging", "value": "string", "pending": boolean },
-    { "label": "Certifications / Standards", "value": "string", "pending": boolean },
-    { "label": "Dimensions (L × W × H)", "value": "string", "pending": boolean },
-    { "label": "Unit Weight", "value": "string", "pending": boolean },
-    { "label": "Colorways / Finish", "value": "string", "pending": boolean },
-    { "label": "Branding / Labeling", "value": "string", "pending": boolean },
-    { "label": "Surface Treatment / Coating", "value": "string", "pending": boolean }
-  ],
-  "manufacturingNotes": [
-    { "label": "Production Process", "value": "string", "pending": boolean },
-    { "label": "Dimensional Tolerances", "value": "string", "pending": boolean },
-    { "label": "Lead Time (days)", "value": "string", "pending": boolean },
-    { "label": "Quality / Testing Requirements", "value": "string", "pending": boolean }
-  ],
-  "commercialTerms": [
-    { "label": "Incoterms", "value": "string", "pending": boolean },
-    { "label": "Payment Terms", "value": "string", "pending": boolean },
-    { "label": "Port of Loading", "value": "string", "pending": boolean },
-    { "label": "Destination Port", "value": "string", "pending": boolean },
-    { "label": "Sample Requirements", "value": "string", "pending": boolean },
-    { "label": "Required Documents", "value": "string", "pending": boolean }
-  ],
-  "categoryRelevantFields": ["array of field label strings relevant to this product category"],
-  "ambiguities": ["array of fields that were unclear or partially mentioned"],
-  "missingFields": ["array of important fields NOT found in the document that a buyer should fill in"]
+  "product": {
+    "name": { "value": "extracted name", "source_type": "uploaded_document", "confidence": "high", "buyer_confirmed": true },
+    "classification": { "broad_category": "Apparel & Textiles", "confidence": "high" },
+    "intended_use": { "value": "usage", "source_type": "uploaded_document", "confidence": "high" },
+    "description": { "value": "professional brief", "source_type": "uploaded_document", "confidence": "high" }
+  },
+  "quantity": {
+    "value": { "value": "5000 pcs", "source_type": "uploaded_document", "confidence": "high" }
+  },
+  "specifications": {
+    "Materials": { "value": "value", "source_type": "uploaded_document", "confidence": "high" }
+  },
+  "manufacturing": {},
+  "commercial": {}
 }
 
 Rules:
-- Set pending: false for any field where you found clear information in the document
-- Set pending: true and value: "(Pending)" for fields not mentioned in the document
+- ONLY include fields where you found CLEAR information in the document. Do not include empty or "Pending" fields.
 - Always include units: mm, cm, g, kg, g/m², days, USD, %, etc.
-- The description MUST be a professional supplier brief, not just copied raw text
-- missingFields should list what a buyer SHOULD provide but the document didn't mention
+- Set "source_type": "uploaded_document" for all fields.
+- Set "confidence": "high" if clearly stated, "medium" if inferred.
+- Set "buyer_confirmed": true for all extracted fields, since the buyer uploaded this document.
 - Return ONLY the JSON object. Nothing else.`;
 
 type ExtractionMethod = 'text' | 'ocr' | 'mixed' | 'image-only';

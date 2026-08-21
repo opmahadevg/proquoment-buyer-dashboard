@@ -90,23 +90,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://proquoment.com',
-        'X-Title': 'Proquoment Buyer Dashboard',
-      },
-      body: JSON.stringify({ model: MODEL, messages, stream, ...parameters }),
-      signal: AbortSignal.timeout(25000),
-    });
+    const FALLBACK_MODELS = [
+      'openai/gpt-5.6-luna',
+      'google/gemini-3.7-flash'
+    ];
 
-    if (!res.ok) {
-      const text = await res.text();
+    let res: Response | null = null;
+    let lastErrorText = '';
+
+    for (const modelToTry of FALLBACK_MODELS) {
+      try {
+        const tempRes = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+            'HTTP-Referer': 'https://proquoment.com',
+            'X-Title': 'Proquoment Buyer Dashboard',
+          },
+          body: JSON.stringify({ model: modelToTry, messages, stream, ...parameters }),
+          signal: AbortSignal.timeout(25000),
+        });
+
+        if (tempRes.ok) {
+          res = tempRes;
+          break;
+        } else {
+          lastErrorText = await tempRes.text();
+        }
+      } catch (e) {
+        lastErrorText = e instanceof Error ? e.message : String(e);
+      }
+    }
+
+    if (!res) {
       return NextResponse.json(
-        { error: `OpenRouter API error: ${res.status}`, details: text },
-        { status: res.status }
+        { error: `OpenRouter API error`, details: lastErrorText },
+        { status: 502 }
       );
     }
 

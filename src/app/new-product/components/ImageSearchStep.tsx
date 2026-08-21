@@ -48,9 +48,10 @@ function ImageCard({
   onDeselect: (pos: number) => void;
 }) {
   const [loaded, setLoaded] = useState(false);
+  // H5 FIX: derive src from props instead of stale useState — reset on key change
+  const [useFallback, setUseFallback] = useState(false);
   const [errored, setErrored] = useState(false);
-  // Try original first, fallback to thumbnail
-  const [src, setSrc] = useState(img.original || img.thumbnail);
+  const src = errored ? '' : (useFallback ? img.thumbnail : (img.original || img.thumbnail));
 
   const handleClick = () => {
     if (isSelected) {
@@ -61,9 +62,8 @@ function ImageCard({
   };
 
   const handleError = () => {
-    if (src !== img.thumbnail) {
-      // Fallback from original → thumbnail
-      setSrc(img.thumbnail);
+    if (!useFallback && img.thumbnail && img.thumbnail !== img.original) {
+      setUseFallback(true);
     } else {
       setErrored(true);
     }
@@ -207,7 +207,7 @@ function SelectedRow({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: ImageSearchStepProps) {
-  const [query, setQuery] = useState(productText);
+  const [query, setQuery] = useState(productText || '');
   const [refinedQuery, setRefinedQuery] = useState('');
   const [results, setResults] = useState<ImageResult[]>([]);
   const [selected, setSelected] = useState<SelectedImage[]>([]);
@@ -218,16 +218,15 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Auto-search on mount using product text
+  // Auto-search when query or productText changes (or on initial load)
   useEffect(() => {
-    if (productText.trim()) {
-      doSearch(productText, false);
-    }
+    const target = query || productText || 'product photo';
+    doSearch(target, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const doSearch = useCallback(async (q: string, skipRefine = false) => {
-    if (!q.trim()) return;
+    const searchTarget = q.trim() || 'sourcing product photo';
 
     // Cancel any in-flight request so stale results never overwrite fresh ones
     abortRef.current?.abort();
@@ -243,13 +242,13 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
       const res = await fetch('/api/image-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, skipRefine }),
+        body: JSON.stringify({ query: searchTarget, skipRefine }),
         signal: controller.signal,
       });
       if (!res.ok) throw new Error('Search failed');
       const data = await res.json();
       setResults(data.images || []);
-      if (data.refinedQuery && data.refinedQuery !== q) {
+      if (data.refinedQuery && data.refinedQuery !== searchTarget) {
         setRefinedQuery(data.refinedQuery);
       }
     } catch (err: unknown) {
@@ -262,13 +261,17 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
   }, []);
 
 
+  // H6 FIX: select/deselect/note by URL (original), not position — avoids cross-search collision
   const handleSelect = (img: ImageResult) => {
-    if (selected.length >= 8) return; // cap at 8
+    if (selected.length >= 8) return;
+    if (selected.some(s => s.original === img.original)) return; // prevent dupes
     setSelected((prev) => [...prev, { ...img, note: '' }]);
   };
 
-  const handleDeselect = (pos: number) => {
-    setSelected((prev) => prev.filter((s) => s.position !== pos));
+  const handleDeselect = (posOrUrl: number | string) => {
+    setSelected((prev) => prev.filter((s) =>
+      typeof posOrUrl === 'string' ? s.original !== posOrUrl : s.position !== posOrUrl
+    ));
   };
 
   const handleNoteChange = (pos: number, note: string) => {
@@ -285,6 +288,22 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
         title: s.note ? `${s.title} — ${s.note}` : s.title,
         position: s.position,
       }));
+
+      // M3 FIX: store visual intent in localStorage for BuilderStep to pick up
+      const imageUrls = payload.map(img => img.url);
+      fetch('/api/ai/analyze-visual-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: imageUrls, productName: productText })
+      }).then(res => res.json())
+        .then(data => {
+          if (data?.data?.compact_summary || data?.data?.observations) {
+            try {
+              localStorage.setItem(`visual_intent_${rfqId}`, JSON.stringify(data.data));
+            } catch {}
+          }
+        }).catch(e => console.warn('Background visual intent analysis failed:', e));
+
       await fetch('/api/rfq-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -292,14 +311,14 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
       });
     } catch (e) {
       console.error('Failed to save reference images:', e);
-      // Non-blocking — still advance to builder
     } finally {
       setSaving(false);
       onNext(selected);
     }
   };
 
-  const selectedPositions = new Set(selected.map((s) => s.position));
+  // H6 FIX: track by URL not position
+  const selectedUrls = new Set(selected.map((s) => s.original));
 
   return (
     <div className="min-h-screen bg-[var(--background)] flex flex-col">
@@ -366,7 +385,6 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    setActiveChip(null);
                     doSearch(query, true);
                   }
                 }}
@@ -460,12 +478,14 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
               >
                 {results.map((img) => (
                   <motion.div
-                    key={img.position}
+                    // H5 FIX: key by URL+position so React remounts on new search
+                    key={`${img.original || img.thumbnail}-${img.position}`}
                     variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0 } }}
                   >
                     <ImageCard
                       img={img}
-                      isSelected={selectedPositions.has(img.position)}
+                      // H6 FIX: isSelected by URL
+                      isSelected={selectedUrls.has(img.original)}
                       onSelect={handleSelect}
                       onDeselect={handleDeselect}
                     />

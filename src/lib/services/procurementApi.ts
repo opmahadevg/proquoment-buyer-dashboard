@@ -30,36 +30,112 @@ async function getUserId(): Promise<string | null> {
 
 // ── Fetchers ──────────────────────────────────────────────────────────────
 
-export async function fetchBuyerRFQs() {
-  const supabase = getSupabase();
-  if (!supabase) return [];
-  const userId = await getUserId();
-  if (!userId) return [];
+function rfqStorageKey(userId?: string | null): string {
+  return userId ? `proquoment_rfqs_${userId}` : 'proquoment_rfqs';
+}
 
-  const { data, error } = await supabase
-    .from('rfqs')
-    .select('*')
-    .eq('buyer_id', userId) // Scoped to current buyer
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('fetchBuyerRFQs:', error);
+export function getStoredRFQs(userId?: string | null): any[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(rfqStorageKey(userId));
+    return raw ? JSON.parse(raw) : [];
+  } catch {
     return [];
   }
-  return (data || []).map((r: any) => ({
-    id: r.id,
-    product: r.product,
-    buyer: r.buyer,
-    qty: r.qty,
-    value: r.value,
-    status: r.status,
-    date: r.date,
-    assignedSupplier: r.assigned_supplier,
-    deadline: r.deadline,
-    targetPrice: r.target_price,
-    specs: r.specs,
-    createdAt: r.created_at,
-  }));
+}
+
+export function saveRFQToLocalStorage(rfq: any, userId?: string | null): void {
+  if (typeof window === 'undefined') return;
+  const existing = getStoredRFQs(userId);
+  const idx = existing.findIndex((r) => r.id === rfq.id);
+  if (idx !== -1) {
+    existing[idx] = rfq;
+  } else {
+    existing.unshift(rfq);
+  }
+  localStorage.setItem(rfqStorageKey(userId), JSON.stringify(existing));
+}
+
+export async function fetchBuyerRFQs() {
+  const supabase = getSupabase();
+  const userId = await getUserId();
+  const dbUserId = userId || null;
+
+  let dbRfqs: any[] = [];
+  if (supabase) {
+    const query = userId
+      ? supabase.from('rfqs').select('*').or(`buyer_id.eq.${userId},buyer_id.is.null`).order('created_at', { ascending: false })
+      : supabase.from('rfqs').select('*').order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('fetchBuyerRFQs:', error);
+    } else if (data) {
+      dbRfqs = data.map((r: any) => ({
+        id: r.id,
+        product: r.product,
+        buyer: r.buyer,
+        qty: r.qty,
+        value: r.value,
+        status: r.status,
+        date: r.date,
+        assignedSupplier: r.assigned_supplier,
+        deadline: r.deadline,
+        targetPrice: r.target_price,
+        specs: r.specs,
+        createdAt: r.created_at,
+      }));
+    }
+  }
+
+  // Merge with localStorage RFQs
+  const localRfqs = getStoredRFQs(userId);
+  const combined = [...dbRfqs];
+  for (const local of localRfqs) {
+    if (!combined.some((r) => r.id === local.id)) {
+      combined.push(local);
+
+      // Auto-sync local RFQ to Supabase so Admin Dashboard receives it
+      if (supabase) {
+        supabase
+          .from('rfqs')
+          .insert({
+            id: local.id,
+            product: local.product,
+            buyer: local.buyer,
+            qty: local.qty,
+            value: local.value || 'TBD',
+            status: local.status || 'new',
+            date: local.date,
+            deadline: local.deadline || null,
+            specs: local.specs || null,
+            description: local.description || null,
+            ai_chat: local.aiChat || null,
+            buyer_id: dbUserId,
+            rfq_state: local.rfqState || null,
+            target_price: local.targetPrice || null,
+          })
+          .then(({ error }) => {
+            if (!error) {
+              supabase
+                .from('notifications')
+                .insert({
+                  target_dashboard: 'admin',
+                  type: 'new_rfq',
+                  title: `New RFQ: ${local.product}`,
+                  message: `${local.buyer || 'Buyer'} submitted RFQ for ${local.qty} of ${local.product}`,
+                  action_url: `/rfq/${local.id}`,
+                })
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }
+
+  return combined;
 }
 
 export async function fetchBuyerQuotes() {
@@ -330,19 +406,26 @@ export async function submitRFQ(rfq: {
   buyer: string;
   description?: string;
   aiChat?: any;
+  // C5 FIX: accept structured RFQ state for DB persistence
+  rfqState?: any;
 }) {
   const supabase = getSupabase();
-  if (!supabase) throw new Error('No Supabase client');
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const userId = user?.id;
-  if (!userId) throw new Error('Not authenticated');
+  let userId: string | undefined;
+  let userEmail: string | undefined;
+  if (supabase) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      userId = user?.id;
+      userEmail = user?.email;
+    } catch {}
+  }
 
-  let resolvedBuyer = rfq.buyer;
-  const isDemo = user.email ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(user.email) : false;
+  let resolvedBuyer = rfq.buyer || 'Enterprise Buyer';
+  const isDemo = userEmail ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(userEmail) : false;
   if (isDemo) {
     resolvedBuyer = 'Demo User';
-  } else {
+  } else if (userId && supabase) {
     try {
       const { data: profile } = await supabase
         .from('buyer_profiles')
@@ -352,11 +435,9 @@ export async function submitRFQ(rfq: {
 
       resolvedBuyer = profile?.organization_name ||
                       profile?.legal_name ||
-                      user.user_metadata?.full_name ||
-                      user.email?.split('@')[0] ||
-                      'Enterprise Buyer';
+                      resolvedBuyer;
     } catch {
-      resolvedBuyer = user.email?.split('@')[0] || 'Enterprise Buyer';
+      resolvedBuyer = userEmail?.split('@')[0] || 'Enterprise Buyer';
     }
   }
 
@@ -367,7 +448,7 @@ export async function submitRFQ(rfq: {
     year: 'numeric',
   });
 
-  const { error } = await supabase.from('rfqs').insert({
+  const newRfqItem = {
     id,
     product: rfq.product,
     buyer: resolvedBuyer,
@@ -376,15 +457,45 @@ export async function submitRFQ(rfq: {
     status: 'new',
     date: dateStr,
     deadline: rfq.deadline || null,
+    targetPrice: rfq.targetPrice || null,
     specs: rfq.specs || null,
     description: rfq.description || null,
-    ai_chat: rfq.aiChat || null,
-    buyer_id: userId, // Always stamp with the authenticated buyer's ID
-  });
-  if (error) throw error;
-  return id; // Return real RFQ id for reference image relinking
+    aiChat: rfq.aiChat || null,
+    rfqState: rfq.rfqState || null,
+    createdAt: new Date().toISOString(),
+  };
 
+  // Always save to localStorage first
+  saveRFQToLocalStorage(newRfqItem, userId);
 
+  // Persist to Supabase whenever client is available
+  if (supabase) {
+    try {
+      const dbUserId = userId || null;
+      const { error } = await supabase.from('rfqs').insert({
+        id,
+        product: rfq.product,
+        buyer: resolvedBuyer,
+        qty: rfq.qty,
+        value: rfq.value || 'TBD',
+        status: 'new',
+        date: dateStr,
+        deadline: rfq.deadline || null,
+        specs: rfq.specs || null,
+        description: rfq.description || null,
+        ai_chat: rfq.aiChat || null,
+        buyer_id: dbUserId,
+        // C5 FIX: persist structured RFQ state and target price
+        rfq_state: rfq.rfqState || null,
+        target_price: rfq.targetPrice || null,
+      });
+      if (error) console.error('Supabase submitRFQ error:', error);
+    } catch (err) {
+      console.warn('Failed to insert RFQ to Supabase (localStorage fallback saved):', err);
+    }
+  }
+
+  // H9 FIX: notifications are now reachable (was dead code after premature return)
   const extras = [
     rfq.specs && `Specs: ${rfq.specs}`,
     rfq.targetPrice && `Target: ${rfq.targetPrice}`,
@@ -1085,6 +1196,8 @@ export interface RFQDraft {
   title: string;
   productText: string;
   rfqData: any;
+  // C4 FIX: add rfqState so BuilderStep can restore new-format state
+  rfqState?: any;
   conversationHistory: any[];
   messages: any[];
   completionPct: number;
@@ -1098,6 +1211,8 @@ function mapDraft(row: any): RFQDraft {
     title: row.title || 'Untitled RFQ',
     productText: row.product_text || '',
     rfqData: row.rfq_data || {},
+    // C4 FIX: map rfq_state from DB row
+    rfqState: row.rfq_state || null,
     conversationHistory: row.conversation_history || [],
     messages: row.messages || [],
     completionPct: row.completion_pct || 0,
@@ -1112,6 +1227,7 @@ export async function saveDraftRFQ(draft: {
   title: string;
   productText: string;
   rfqData: any;
+  rfqState?: any;
   conversationHistory: any[];
   messages: any[];
   completionPct: number;
@@ -1139,10 +1255,11 @@ export async function saveDraftRFQ(draft: {
         title: draft.title,
         product_text: draft.productText,
         rfq_data: draft.rfqData,
+        rfq_state: draft.rfqState || null,
         conversation_history: draft.conversationHistory,
         messages: draft.messages,
         completion_pct: draft.completionPct,
-        updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
       .eq('id', draft.id)
       .eq('buyer_id', userId);
@@ -1152,16 +1269,18 @@ export async function saveDraftRFQ(draft: {
     // Insert new
     const { data, error } = await supabase
       .from('rfq_drafts')
-      .insert({
-        buyer_id: userId,
-        title: draft.title,
-        product_text: draft.productText,
-        rfq_data: draft.rfqData,
-        conversation_history: draft.conversationHistory,
-        messages: draft.messages,
-        completion_pct: draft.completionPct,
-      })
-      .select('id')
+      .insert([
+        {
+          buyer_id: userId,
+          title: draft.title,
+          product_text: draft.productText,
+          rfq_data: draft.rfqData,
+          rfq_state: draft.rfqState || null,
+          conversation_history: draft.conversationHistory,
+          messages: draft.messages,
+          completion_pct: draft.completionPct,
+        }
+      ]).select('id')
       .single();
     if (error) throw error;
     return data.id;

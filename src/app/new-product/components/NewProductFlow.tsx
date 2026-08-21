@@ -35,11 +35,14 @@ import { submitRFQ, saveDraftRFQ, fetchDraftRFQ, deleteDraftRFQ } from '@/lib/se
 import { useAuth } from '@/contexts/AuthContext';
 import ImageSearchStep from './ImageSearchStep';
 
+import { MessageBubble, TypingIndicator } from './ChatMessage';
+import { RFQPanel } from './RFQPanel';
+import BuilderStep from './BuilderStep';
 // ─── Types ───────────────────────────────────────────────────────────────────
-type Step = 'intro' | 'transition' | 'choose' | 'upload' | 'extracting' | 'review' | 'image-search' | 'builder';
-type RFQMethod = 'complete' | 'partial' | 'scratch';
+export type Step = 'intro' | 'transition' | 'choose' | 'upload' | 'extracting' | 'review' | 'image-search' | 'builder';
+export type RFQMethod = 'complete' | 'partial' | 'scratch';
 
-interface Message {
+export interface Message {
   id: string;
   role: 'ai' | 'user';
   text: string;
@@ -49,7 +52,7 @@ interface Message {
   images?: { url: string; title?: string }[];
 }
 
-interface RFQData {
+export interface RFQData {
   productName: string;
   category: string;
   intendedUse: string;
@@ -64,7 +67,7 @@ interface RFQData {
 }
 
 // ─── System prompt for conversational text (NO JSON) ─────────────────────────
-const CHAT_SYSTEM_PROMPT = `You are a precision procurement RFQ agent for Proquoment, a B2B international sourcing platform. Help the buyer build a complete, manufacturer-ready RFQ through intelligent, focused questions.
+export const CHAT_SYSTEM_PROMPT = `You are a precision procurement RFQ agent for Proquoment, a B2B international sourcing platform. Help the buyer build a complete, manufacturer-ready RFQ through intelligent, focused questions.
 
 RESPONSE FORMAT — follow this structure exactly every time:
 1. One short sentence confirming or acknowledging the last answer (skip on first message).
@@ -140,7 +143,7 @@ OPTIONS: Grade A, ISO 3632-1 | Grade B, ISO 3632-2 | Pushali grade | Custom spec
 // Keep the last N history messages to avoid token-limit errors across all providers.
 // System prompt is always prepended separately, so this only trims conversation turns.
 const MAX_HISTORY_MESSAGES = 40;
-function trimHistory(history: { role: string; content: string }[]) {
+export function trimHistory(history: { role: string; content: string }[]) {
   return history.length > MAX_HISTORY_MESSAGES
     ? history.slice(history.length - MAX_HISTORY_MESSAGES)
     : history;
@@ -151,7 +154,7 @@ function trimHistory(history: { role: string; content: string }[]) {
  * Injected into the system prompt so the AI never re-asks answered questions,
  * even if old messages have been trimmed from conversation history.
  */
-function buildConfirmedFieldsSummary(rfq: RFQData): string {
+export function buildConfirmedFieldsSummary(rfq: RFQData): string {
   const lines: string[] = [];
 
   // Basic fields
@@ -186,7 +189,7 @@ function buildConfirmedFieldsSummary(rfq: RFQData): string {
   return `\n\nCONFIRMED FIELDS — these have already been answered by the buyer. Do NOT ask about any of these again. Move to the next UNANSWERED field in the priority list:\n${lines.join('\n')}`;
 }
 
-const JSON_SYSTEM_PROMPT = `You are a data extraction agent. Based on the conversation provided, extract all known product details and return ONLY a valid JSON object. No explanations, no text, no markdown — just the raw JSON object.
+export const JSON_SYSTEM_PROMPT = `You are a data extraction agent. Based on the conversation provided, extract all known product details and return ONLY a valid JSON object. No explanations, no text, no markdown — just the raw JSON object.
 
 The JSON must have this exact structure:
 {
@@ -235,7 +238,7 @@ Rules:
 - The options array should contain 2–4 short strings separated by | (pipe) for quick-reply buttons, otherwise [].
 - Return ONLY the JSON object. Nothing else.`;
 
-const EMPTY_RFQ: RFQData = {
+export const EMPTY_RFQ: RFQData = {
   productName: '',
   category: '',
   intendedUse: '',
@@ -274,7 +277,7 @@ const EMPTY_RFQ: RFQData = {
 // ─── Parse options from conversational text ───────────────────────────────────
 // Issue #1 fix: use | as delimiter to prevent $1,500/kg splitting into two chips
 // Issue #8 fix: detect OPTIONS[multi]: prefix for multi-select questions
-function extractOptionsFromText(text: string): { cleanText: string; options: string[]; multiSelect: boolean } {
+export function extractOptionsFromText(text: string): { cleanText: string; options: string[]; multiSelect: boolean } {
   // Match both OPTIONS: and OPTIONS[multi]: patterns
   const optionsMatch = text.match(/OPTIONS(?:\[(multi)\])?:\s*(.+)$/m);
   if (!optionsMatch) return { cleanText: text.trim(), options: [], multiSelect: false };
@@ -878,1030 +881,8 @@ function ChooseStep({ onNext }: { onNext: (method: RFQMethod) => void }) {
   );
 }
 
-// ─── Typing Indicator ─────────────────────────────────────────────────────────
-function TypingIndicator() {
-  return (
-    <div className="flex items-center gap-1 py-3 mb-2">
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce"
-          style={{ animationDelay: `${i * 120}ms`, animationDuration: '0.8s' }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── Message Bubble ───────────────────────────────────────────────────────────
-function MessageBubble({
-  msg,
-  onOptionClick,
-  onCorrect,
-  isLoading,
-}: {
-  msg: Message;
-  onOptionClick: (opt: string) => void;
-  onCorrect?: (text: string) => void;
-  isLoading: boolean;
-}) {
-  const [selectedSingle, setSelectedSingle] = useState<string | null>(null);
-  const [selectedMulti, setSelectedMulti] = useState<Set<string>>(new Set());
-  const [multiConfirmed, setMultiConfirmed] = useState(false);
-
-  const handleSingleSelect = (opt: string) => {
-    if (isLoading || selectedSingle) return;
-    setSelectedSingle(opt);
-    onOptionClick(opt);
-  };
-
-  const handleMultiToggle = (opt: string) => {
-    if (isLoading || multiConfirmed) return;
-    setSelectedMulti((prev) => {
-      const next = new Set(prev);
-      if (next.has(opt)) {
-        next.delete(opt);
-      } else {
-        next.add(opt);
-      }
-      return next;
-    });
-  };
-
-  const handleMultiConfirm = () => {
-    if (isLoading || multiConfirmed || selectedMulti.size === 0) return;
-    setMultiConfirmed(true);
-    onOptionClick(Array.from(selectedMulti).join(', '));
-  };
-
-  if (msg.role === 'user') {
-    return (
-      <div className="flex flex-col items-end gap-1.5 mb-6 group">
-        {msg.images && msg.images.length > 0 && (
-          <div className="flex flex-col items-end gap-2 mb-1">
-            {msg.images.map((img, i) => (
-              <div
-                key={i}
-                className="w-16 h-20 rounded-xl overflow-hidden border border-gray-200/90 shadow-sm bg-gray-50 flex-shrink-0"
-              >
-                <img
-                  src={img.url}
-                  alt={img.title || `Inspiration ${i + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="flex justify-end items-center gap-1.5">
-          {onCorrect && (
-            <button
-              onClick={() => onCorrect(msg.text)}
-              title="Correct this answer"
-              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] text-gray-400 hover:text-primary transition-all duration-150 px-2 py-1 rounded-lg hover:bg-gray-50 flex-shrink-0"
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-              Correct
-            </button>
-          )}
-          <div className="bg-[#F0F0F2] text-[#0D0D14] text-sm px-4 py-2.5 rounded-2xl max-w-[80%] leading-relaxed">
-            {msg.text}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const isMultiSelect = msg.multiSelect === true;
-
-  return (
-    <div className="mb-7">
-      {/* AI message body — plain prose, no bubble */}
-      {msg.isStreaming && !msg.text ? (
-        <TypingIndicator />
-      ) : (
-        <div
-          className="text-[15px] text-[#0D0D14] leading-[1.7] prose prose-sm max-w-none
-          prose-p:my-1.5 prose-p:text-[15px] prose-p:text-[#0D0D14]
-          prose-strong:font-semibold prose-strong:text-[#0D0D14]
-          prose-ul:my-2 prose-ul:space-y-1.5 prose-li:text-[15px] prose-li:text-[#0D0D14] prose-li:my-0
-          [&_li]:list-none [&_ul]:pl-0"
-        >
-          <ReactMarkdown>{msg.text}</ReactMarkdown>
-        </div>
-      )}
-
-
-      {/* Quick-reply chips — only on last non-streaming message */}
-      {!msg.isStreaming && msg.options && msg.options.length > 0 && (
-        <div className="mt-4">
-          {/* Issue #8: multi-select hint */}
-          {isMultiSelect && !multiConfirmed && (
-            <p className="text-xs text-gray-400 mb-2">Select all that apply</p>
-          )}
-          {/* Issue #1: chips use whitespace-nowrap to prevent truncation */}
-          <div className="flex flex-wrap gap-2">
-            {msg.options.map((opt, idx) => {
-              const isSingleSelected = !isMultiSelect && selectedSingle === opt;
-              const isMultiSelected = isMultiSelect && selectedMulti.has(opt);
-              const isSelected = isSingleSelected || isMultiSelected;
-              const isDisabledSingle = !isMultiSelect && (isLoading || !!selectedSingle);
-              const isDisabledMulti = isMultiSelect && (isLoading || multiConfirmed);
-              return (
-                <button
-                  key={`${idx}-${opt}`}
-                  onClick={() => isMultiSelect ? handleMultiToggle(opt) : handleSingleSelect(opt)}
-                  disabled={isDisabledSingle || isDisabledMulti}
-                  className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0
-                    ${
-                      isSelected
-                        ? 'bg-[#0D0D14] border-[#0D0D14] text-white'
-                        : (isDisabledSingle || isDisabledMulti)
-                          ? 'border-gray-200 text-gray-300 bg-white'
-                          : 'border-gray-300 text-[#0D0D14] bg-white hover:border-[#0D0D14] hover:bg-[#F5F5F8]'
-                    }`}
-                >
-                  {isSelected && <CheckCircle size={12} className="inline mr-1.5 -mt-0.5" />}
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-          {/* Issue #8: confirm button for multi-select */}
-          {isMultiSelect && !multiConfirmed && selectedMulti.size > 0 && (
-            <button
-              onClick={handleMultiConfirm}
-              className="mt-3 px-4 py-1.5 bg-[#0D0D14] text-white text-sm font-semibold rounded-full hover:bg-[#1a1a26] transition-colors"
-            >
-              Confirm ({selectedMulti.size} selected)
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ─── RFQ Panel ────────────────────────────────────────────────────────────────
-function RFQPanel({
-  rfq,
-  rfqTitle,
-  finalized,
-  isLoading,
-  onFinalize,
-}: {
-  rfq: RFQData;
-  rfqTitle: string;
-  finalized: boolean;
-  isLoading: boolean;
-  onFinalize: () => void;
-}) {
-  // Issue #2: filter specs to only relevant fields for this category
-  const relevantLabels = rfq.categoryRelevantFields.length > 0
-    ? new Set(rfq.categoryRelevantFields)
-    : null; // null = show all (no category determined yet)
-
-  const visibleSpecs = relevantLabels
-    ? rfq.specifications.filter(s => relevantLabels.has(s.label))
-    : rfq.specifications;
-
-  const allNotes = rfq.manufacturingNotes;
-  const allCommercial = rfq.commercialTerms || [];
-
-  // Issue #3: compute completion including commercial terms; never go backwards
-  const filledSpecs = visibleSpecs.filter((s) => !s.pending).length;
-  const filledNotes = allNotes.filter((n) => !n.pending).length;
-  const filledCommercial = allCommercial.filter((c) => !c.pending).length;
-  const basicFilled =
-    (rfq.productName ? 1 : 0) +
-    (rfq.category ? 1 : 0) +
-    (rfq.intendedUse ? 1 : 0) +
-    (rfq.description ? 1 : 0) +
-    (rfq.moq ? 1 : 0);
-
-  const totalFields = visibleSpecs.length + allNotes.length + allCommercial.length + 5;
-  const rawPct = totalFields > 0 ? Math.round(((filledSpecs + filledNotes + filledCommercial + basicFilled) / totalFields) * 100) : 0;
-
-  // Issue #3: high-water-mark — progress never decreases
-  const highWaterRef = React.useRef(0);
-  highWaterRef.current = Math.max(rawPct, highWaterRef.current);
-  const completionPct = highWaterRef.current;
-
-  // 70% gate removed — buyer can finalize at any completion percentage
-  const canFinalize = true;
-
-  const hasBasicInfo =
-    rfq.productName || rfq.category || rfq.intendedUse || rfq.description || rfq.moq;
-
-  return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Panel header */}
-      <div className="px-7 pt-7 pb-5 border-b border-gray-100">
-        <h2 className="text-lg font-bold text-[#0D0D14] leading-snug mb-1">
-          {rfqTitle || 'New Product RFQ'}
-        </h2>
-        <div className="flex items-center gap-3 mt-3">
-          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{
-                width: `${completionPct}%`,
-                backgroundColor: completionPct >= 70 ? '#16a34a' : '#0D0D14',
-              }}
-            />
-          </div>
-          <span className={`text-xs font-semibold tabular-nums ${completionPct >= 70 ? 'text-green-600' : 'text-[#0D0D14]'}`}>
-            {completionPct}%
-          </span>
-        </div>
-
-      </div>
-
-      {/* Panel body */}
-      <div className="flex-1 overflow-y-auto px-7 py-6 space-y-7 text-sm">
-        {/* Basic info */}
-        {hasBasicInfo ? (
-          <div className="space-y-2">
-            {rfq.productName && <InfoRow label="Product Name" value={rfq.productName} bold />}
-            {rfq.category && <InfoRow label="Category" value={rfq.category} />}
-            {rfq.intendedUse && <InfoRow label="Intended Use / Function" value={rfq.intendedUse} />}
-            {rfq.description && <InfoRow label="Product Description" value={rfq.description} />}
-            {rfq.moq && <InfoRow label="MOQ" value={rfq.moq} />}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 italic">
-            Product details will appear here as the conversation progresses…
-          </p>
-        )}
-
-        {/* Specifications — Issue #2: only relevant fields shown */}
-        {visibleSpecs.length > 0 && (
-          <div>
-            <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
-              Specifications:
-            </p>
-            <ul className="space-y-2">
-              {visibleSpecs.map((spec, i) => (
-                <li key={i} className="flex items-baseline gap-1.5 text-sm leading-snug">
-                  <span className="text-gray-400 flex-shrink-0">•</span>
-                  {spec.pending ? (
-                    <span className="text-gray-400 italic">{spec.label}: (Pending)</span>
-                  ) : (
-                    <span className="text-[#0D0D14]">
-                      <span className="font-semibold">{spec.label}:</span> {spec.value}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Manufacturing Notes */}
-        <div>
-          <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
-            Manufacturing Notes:
-          </p>
-          <ul className="space-y-2">
-            {allNotes.map((note, i) => (
-              <li key={i} className="flex items-baseline gap-1.5 text-sm leading-snug">
-                <span className="text-gray-400 flex-shrink-0">•</span>
-                {note.pending ? (
-                  <span className="text-gray-400 italic">{note.label}: (Pending)</span>
-                ) : (
-                  <span className="text-[#0D0D14]">
-                    <span className="font-semibold">{note.label}:</span> {note.value}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Commercial Terms — Issue #5 #6: new section */}
-        <div>
-          <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
-            Commercial Terms:
-          </p>
-          <ul className="space-y-2">
-            {allCommercial.map((term, i) => (
-              <li key={i} className="flex items-baseline gap-1.5 text-sm leading-snug">
-                <span className="text-gray-400 flex-shrink-0">•</span>
-                {term.pending ? (
-                  <span className="text-gray-400 italic">{term.label}: (Pending)</span>
-                ) : (
-                  <span className="text-[#0D0D14]">
-                    <span className="font-semibold">{term.label}:</span> {term.value}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Ambiguities */}
-        {rfq.ambiguities.length > 0 && (
-          <div>
-            <p className="text-xs font-bold text-[#0D0D14] uppercase tracking-widest mb-3">
-              Ambiguities / Pending Clarifications:
-            </p>
-            <ul className="space-y-1.5">
-              {rfq.ambiguities.map((item, i) => (
-                <li key={i} className="flex items-baseline gap-1.5 text-sm text-gray-500">
-                  <span className="flex-shrink-0">•</span>
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      {/* Finalize button */}
-      <div className="px-7 py-5 border-t border-gray-100">
-        <button
-          onClick={onFinalize}
-          disabled={finalized || isLoading}
-          className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#0D0D14] text-white rounded-xl text-sm font-semibold hover:bg-[#1a1a26] active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {finalized ? (
-            <>
-              <CheckCircle size={15} /> RFQ Finalized!
-            </>
-          ) : (
-            <>
-              <ChevronRight size={15} /> Finalize &amp; Add to Products
-            </>
-          )}
-        </button>
-        <p className="text-xs text-gray-400 text-center mt-2">Adds product to your sourcing list</p>
-      </div>
-    </div>
-  );
-}
-
-
-function InfoRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <div className="text-sm leading-snug">
-      <span className="font-semibold text-[#0D0D14]">{label}:</span>{' '}
-      <span className={bold ? 'text-[#0D0D14] font-medium' : 'text-gray-600'}>{value}</span>
-    </div>
-  );
-}
-
-// ─── Step 4: RFQ Builder (Dual Gemini calls) ──────────────────────────────────
-function BuilderStep({
-  productText,
-  productName,
-  draftId: initialDraftId,
-  tempRfqId,
-  selectedImages = [],
-  prefilledRfq,
-}: {
-  productText: string;
-  productName: string;
-  draftId?: string;
-  tempRfqId?: string;
-  selectedImages?: any[];
-  /** Pre-extracted RFQ data from uploaded files — merged into initial state */
-  prefilledRfq?: Partial<RFQData>;
-}) {
-  const router = useRouter();
-  const { user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [rfqTitle, setRfqTitle] = useState(productName || 'New Product RFQ');
-  // If prefilledRfq provided (from file upload), merge into EMPTY_RFQ so AI only asks about missing fields
-  const [rfq, setRfq] = useState<RFQData>(() => {
-    if (!prefilledRfq) return { ...EMPTY_RFQ };
-    return {
-      ...EMPTY_RFQ,
-      ...prefilledRfq,
-      specifications: prefilledRfq.specifications?.length
-        ? prefilledRfq.specifications
-        : EMPTY_RFQ.specifications,
-      manufacturingNotes: prefilledRfq.manufacturingNotes?.length
-        ? prefilledRfq.manufacturingNotes
-        : EMPTY_RFQ.manufacturingNotes,
-      commercialTerms: prefilledRfq.commercialTerms?.length
-        ? prefilledRfq.commercialTerms
-        : EMPTY_RFQ.commercialTerms,
-      categoryRelevantFields: prefilledRfq.categoryRelevantFields || [],
-      ambiguities: prefilledRfq.ambiguities || [],
-    };
-  });
-  const rfqRef = useRef<RFQData>(rfq);
-  useEffect(() => { rfqRef.current = rfq; }, [rfq]);
-  const [panelOpen, setPanelOpen] = useState(true);
-  const [conversationHistory, setConversationHistory] = useState<
-    { role: string; content: string }[]
-  >([]);
-  const [initialized, setInitialized] = useState(false);
-  const [finalized, setFinalized] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // ── Draft state ──
-  const [draftId, setDraftId] = useState<string | undefined>(initialDraftId);
-  const [draftSaving, setDraftSaving] = useState(false);
-  const [draftSaved, setDraftSaved] = useState(false);
-  const draftSaveCounterRef = useRef(0); // tracks AI responses for auto-save
-  const draftRestoredRef = useRef(false);
-
-  // Streaming hook for conversational text only
-  const {
-    response: streamingResponse,
-    isLoading: isStreaming,
-    error: streamError,
-    sendMessage: sendStreamingMessage,
-  } = useChat('AUTO', 'auto', true);
-
-  // On stream error: remove any stuck empty AI bubbles and show toast so user can retry
-  useEffect(() => {
-    if (streamError) {
-      // Remove the stuck streaming bubble (empty text, isStreaming flag still true)
-      setMessages((prev) => prev.filter((m) => !(m.role === 'ai' && m.isStreaming && !m.text)));
-      const msg = streamError.message || '';
-      if (
-        msg.includes('503') ||
-        msg.toLowerCase().includes('unavailable') ||
-        msg.toLowerCase().includes('all ai')
-      ) {
-        toast.error('All AI providers are currently unavailable. Please try again shortly.', {
-          duration: 6000,
-        });
-      } else {
-        toast.error('AI connection interrupted — please send your message again.', {
-          duration: 5000,
-        });
-      }
-    }
-  }, [streamError]);
-
-  // Auto-scroll
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Update streaming AI message in real-time (text only, guaranteed clean)
-  useEffect(() => {
-    if (!streamingResponse) return;
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.isStreaming) {
-        const { cleanText } = extractOptionsFromText(streamingResponse);
-        return [...prev.slice(0, -1), { ...last, text: cleanText }];
-      }
-      return prev;
-    });
-  }, [streamingResponse]);
-
-  // When streaming completes: finalize message + update conversation history
-  useEffect(() => {
-    if (!isStreaming && streamingResponse && messages.length > 0) {
-      const last = messages[messages.length - 1];
-      if (last?.isStreaming) {
-        const { cleanText, options: inlineOptions, multiSelect } = extractOptionsFromText(streamingResponse);
-
-        // Finalize the streaming message with clean text
-        // Issue #8: pass multiSelect flag through to message
-        const finalMsg: Message = {
-          ...last,
-          text: cleanText,
-          isStreaming: false,
-          multiSelect: multiSelect || undefined,
-          options: inlineOptions.length > 0 ? inlineOptions : undefined,
-        };
-        setMessages((prev) => [...prev.slice(0, -1), finalMsg]);
-
-        // Add to conversation history
-        const updatedHistory = [...conversationHistory, { role: 'assistant', content: cleanText }];
-        setConversationHistory(updatedHistory);
-
-        // ── Auto-save draft every 2 AI responses ──
-        draftSaveCounterRef.current += 1;
-        if (draftSaveCounterRef.current % 2 === 0 && !finalized) {
-          setTimeout(() => triggerDraftSave(), 500);
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStreaming]);
-
-  // Second Gemini call: extract structured JSON for RFQ panel (with retry on 429)
-  const fireJsonExtractionCall = useCallback(
-    async (
-      history: { role: string; content: string }[],
-      finalMsg: Message,
-      inlineOptions: string[]
-    ) => {
-      const MAX_RETRIES = 3;
-      const BASE_DELAY_MS = 7000;
-
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        try {
-          if (attempt > 0) {
-            // Exponential backoff: 7s, 14s, 28s
-            await new Promise((res) => setTimeout(res, BASE_DELAY_MS * Math.pow(2, attempt - 1)));
-          }
-
-          const jsonMessages = [
-            { role: 'system', content: JSON_SYSTEM_PROMPT },
-            ...trimHistory(history).map((h) => ({ role: h.role, content: h.content })),
-            {
-              role: 'user',
-              content: 'Extract the current RFQ data from the conversation above as JSON.',
-            },
-          ];
-
-          const result = await getChatCompletion('AUTO', 'auto', jsonMessages, {
-            temperature: 0.1,
-            max_tokens: 2048,
-          });
-
-          const rawContent: string = result?.choices?.[0]?.message?.content || '';
-
-          // Parse JSON — strip any accidental markdown fences
-          let jsonStr = rawContent.trim();
-          jsonStr = jsonStr
-            .replace(/^```(?:json)?\s*/i, '')
-            .replace(/\s*```$/i, '')
-            .trim();
-
-          const parsed = JSON.parse(jsonStr);
-          const { options: jsonOptions, ...rfqUpdate } = parsed;
-
-          // Update RFQ panel
-          setRfq((prev) => {
-            const updated = { ...prev };
-            if (rfqUpdate.productName) {
-              updated.productName = rfqUpdate.productName;
-              setRfqTitle(rfqUpdate.productName);
-            }
-            if (rfqUpdate.category) updated.category = rfqUpdate.category;
-            if (rfqUpdate.intendedUse) updated.intendedUse = rfqUpdate.intendedUse;
-            // Issue #7: only update description if new value is substantively longer (prevent regression to raw input)
-            if (rfqUpdate.description) {
-              const newDesc = rfqUpdate.description;
-              const oldDesc = prev.description || '';
-              // Accept new description if it's longer or if current is empty/same as raw first message
-              if (!oldDesc || newDesc.length >= oldDesc.length) {
-                updated.description = newDesc;
-              }
-            }
-            if (rfqUpdate.moq) updated.moq = rfqUpdate.moq;
-            // Issue #3: merge specs preserving filled fields (never regress to Pending)
-            if (rfqUpdate.specifications?.length) {
-              updated.specifications = rfqUpdate.specifications.map((newSpec: any) => {
-                const existing = prev.specifications.find(s => s.label === newSpec.label);
-                // Keep filled value if new would regress it to Pending
-                if (existing && !existing.pending && newSpec.pending) return existing;
-                return newSpec;
-              });
-            }
-            if (rfqUpdate.manufacturingNotes?.length) {
-              updated.manufacturingNotes = rfqUpdate.manufacturingNotes.map((newNote: any) => {
-                const existing = prev.manufacturingNotes.find(n => n.label === newNote.label);
-                if (existing && !existing.pending && newNote.pending) return existing;
-                return newNote;
-              });
-            }
-            // Issue #5 #6: merge commercial terms
-            if (rfqUpdate.commercialTerms?.length) {
-              updated.commercialTerms = rfqUpdate.commercialTerms.map((newTerm: any) => {
-                const existing = prev.commercialTerms.find(c => c.label === newTerm.label);
-                if (existing && !existing.pending && newTerm.pending) return existing;
-                return newTerm;
-              });
-            }
-            // Issue #2: update categoryRelevantFields from AI
-            if (rfqUpdate.categoryRelevantFields?.length) {
-              updated.categoryRelevantFields = rfqUpdate.categoryRelevantFields;
-            }
-            if (rfqUpdate.ambiguities) updated.ambiguities = rfqUpdate.ambiguities;
-            return updated;
-          });
-
-          // If JSON call returned options and inline didn't have any, update the message
-          const finalOptions = inlineOptions.length > 0 ? inlineOptions : jsonOptions || [];
-          if (finalOptions.length > 0 && inlineOptions.length === 0) {
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.id === finalMsg.id) {
-                return [...prev.slice(0, -1), { ...last, options: finalOptions }];
-              }
-              return prev;
-            });
-          }
-
-          // Success — exit retry loop
-          return;
-        } catch (err: unknown) {
-          const errMsg = err instanceof Error ? err.message : String(err);
-          const isRateLimit =
-            errMsg.includes('429') ||
-            errMsg.toLowerCase().includes('rate limit') ||
-            errMsg.toLowerCase().includes('quota');
-
-          if (isRateLimit && attempt < MAX_RETRIES - 1) {
-            // Will retry after backoff delay
-            continue;
-          }
-          // Final attempt failed or non-rate-limit error — fail silently (chat still works)
-        }
-      }
-    },
-    []
-  );
-
-  // ── Draft save function ──
-  const triggerDraftSave = useCallback(async () => {
-    if (finalized || draftSaving) return;
-    setDraftSaving(true);
-    setDraftSaved(false);
-    try {
-      // Compute completion pct inline
-      const filledSpecs = rfq.specifications.filter(s => !s.pending).length;
-      const filledNotes = rfq.manufacturingNotes.filter(n => !n.pending).length;
-      const filledCommercial = (rfq.commercialTerms || []).filter(c => !c.pending).length;
-      const basicFilled = (rfq.productName ? 1 : 0) + (rfq.category ? 1 : 0) + (rfq.intendedUse ? 1 : 0) + (rfq.description ? 1 : 0) + (rfq.moq ? 1 : 0);
-      const totalFields = rfq.specifications.length + rfq.manufacturingNotes.length + (rfq.commercialTerms || []).length + 5;
-      const pct = totalFields > 0 ? Math.round(((filledSpecs + filledNotes + filledCommercial + basicFilled) / totalFields) * 100) : 0;
-
-      const savedId = await saveDraftRFQ({
-        id: draftId,
-        title: rfqTitle || deriveProductName(productText) || 'Untitled RFQ',
-        productText,
-        rfqData: rfq,
-        conversationHistory,
-        messages: messages.filter(m => !m.isStreaming), // don't save streaming state
-        completionPct: pct,
-      });
-      setDraftId(savedId);
-      setDraftSaved(true);
-      setTimeout(() => setDraftSaved(false), 2000);
-    } catch (err) {
-      console.error('Draft save failed:', err);
-    } finally {
-      setDraftSaving(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftId, rfqTitle, productText, rfq, conversationHistory, messages, finalized, draftSaving]);
-
-  // ── Auto-save on page leave ──
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (!finalized && messages.length > 1) {
-        // Best-effort save via sendBeacon isn't practical for Supabase, but we
-        // trigger save on visibilitychange which fires before unload
-        triggerDraftSave();
-      }
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && !finalized && messages.length > 1) {
-        triggerDraftSave();
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [triggerDraftSave, finalized, messages.length]);
-
-  // ── Restore draft on mount ──
-  useEffect(() => {
-    if (!initialDraftId || draftRestoredRef.current) return;
-    draftRestoredRef.current = true;
-
-    (async () => {
-      const draft = await fetchDraftRFQ(initialDraftId);
-      if (!draft) {
-        toast.error('Draft not found');
-        return;
-      }
-      // Restore state
-      setRfqTitle(draft.title);
-      setRfq(draft.rfqData as RFQData);
-      setConversationHistory(draft.conversationHistory);
-      setMessages(draft.messages as Message[]);
-      setDraftId(draft.id);
-      setInitialized(true); // prevent re-initialization
-      toast.success('Draft restored — continue your RFQ');
-    })();
-  }, [initialDraftId]);
-
-  // Initialize conversation
-  const initializeConversation = useCallback(() => {
-    if (initialized || !productText) return;
-    setInitialized(true);
-
-    const initialMsgText = selectedImages.length > 0
-      ? `Here are my inspiration images for ${productText}`
-      : productText;
-
-    const imgList = selectedImages.map((img: any) => ({
-      url: img.thumbnail || img.original,
-      title: img.title || '',
-    }));
-
-    // If prefilled data exists, tell the AI what was already extracted from uploaded files
-    const prefilledContext = prefilledRfq
-      ? `\n\nIMPORTANT: The buyer has already uploaded documents. The following fields were AUTOMATICALLY EXTRACTED from those files and are pre-confirmed. DO NOT re-ask about these fields:\n${buildConfirmedFieldsSummary(rfqRef.current)}\n\nOnly ask about the fields listed in missingFields or any other fields still pending.`
-      : '';
-
-    const userContent = selectedImages.length > 0
-      ? `Here are my inspiration images for ${productText}.\n\nInspiration images selected by buyer:\n${selectedImages.map((img: any, i: number) => `- Image ${i + 1}: ${img.title || 'Product sample'}`).join('\n')}\n\nPlease acknowledge these inspiration images in your first response.`
-      : prefilledRfq
-        ? `I have uploaded documents for my RFQ. Key details have been extracted. Please help me fill in the remaining missing fields: ${(prefilledRfq.missingFields || []).join(', ') || 'Please review and ask about any unclear specifications.'}`
-        : `I want to source the following product: ${productText}`;
-
-    const initialHistory = [{ role: 'user', content: userContent, images: imgList.length > 0 ? imgList : undefined }];
-    setConversationHistory(initialHistory);
-
-    setMessages([
-      {
-        id: 'user-init',
-        role: 'user',
-        text: initialMsgText,
-        images: imgList.length > 0 ? imgList : undefined,
-      },
-    ]);
-
-    const aiMsgId = `ai-${Date.now()}`;
-    setMessages((prev) => [...prev, { id: aiMsgId, role: 'ai', text: '', isStreaming: true }]);
-
-    const confirmedSummary = buildConfirmedFieldsSummary(rfqRef.current);
-    sendStreamingMessage(
-      [{ role: 'system', content: CHAT_SYSTEM_PROMPT + confirmedSummary + prefilledContext }, ...trimHistory(initialHistory)],
-      { temperature: 0.7, max_tokens: 1024 }
-    );
-  }, [initialized, productText, selectedImages, sendStreamingMessage, prefilledRfq]); // rfqRef is a ref, no dep needed
-
-  useEffect(() => {
-    initializeConversation();
-  }, [initializeConversation]);
-
-  const handleSend = (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || isStreaming || isProcessing) return;
-
-    const userMsg: Message = { id: `user-${Date.now()}`, role: 'user', text: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue('');
-
-    const newHistory = [...conversationHistory, { role: 'user', content: trimmed }];
-    setConversationHistory(newHistory);
-
-    // Fire JSON extraction immediately in parallel — don't wait for AI chat to finish.
-    // User's answer already contains the data we need to update the RFQ panel live.
-    const placeholderMsg: Message = { id: `ai-json-${Date.now()}`, role: 'ai', text: '' };
-    fireJsonExtractionCall(newHistory, placeholderMsg, []);
-
-    const aiMsgId = `ai-${Date.now()}`;
-    setMessages((prev) => [...prev, { id: aiMsgId, role: 'ai', text: '', isStreaming: true }]);
-
-    const confirmedSummary = buildConfirmedFieldsSummary(rfqRef.current);
-    sendStreamingMessage(
-      [{ role: 'system', content: CHAT_SYSTEM_PROMPT + confirmedSummary }, ...trimHistory(newHistory)],
-      { temperature: 0.7, max_tokens: 1024 }
-    );
-  };
-
-  const handleFinalize = async () => {
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const title = rfqTitle || rfq.productName || deriveProductName(productText);
-
-    await saveProduct({
-      id: `prod-rfq-${Date.now()}`,
-      name: title,
-      category: rfq.category,
-      description: rfq.description,
-      moq: rfq.moq,
-      specifications: rfq.specifications,
-      manufacturingNotes: rfq.manufacturingNotes,
-      status: 'New Update',
-      stage: 'Quoting',
-      updated: dateStr,
-      image: '',
-      imageAlt: `${title} product`,
-    });
-
-    try {
-      const isDemo = user?.email ? ['demo@proquoment.com', 'buyer@proquoment.com'].includes(user.email) : false;
-      const buyerName = isDemo
-        ? 'Demo User'
-        : user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Enterprise Buyer';
-
-      // Issue #6: include commercial terms in submitted specs
-      const commercialSpecStr = (rfq.commercialTerms || [])
-        .filter(t => !t.pending)
-        .map(t => `${t.label}: ${t.value}`)
-        .join(' | ');
-      const productSpecStr = rfq.specifications
-        .filter(s => !s.pending)
-        .map(s => `${s.label}: ${s.value}`)
-        .join(', ');
-      const specsStr = [productSpecStr, commercialSpecStr].filter(Boolean).join(' || ');
-
-      const realId = await submitRFQ({
-        product: title,
-        qty: rfq.moq || 'TBD',
-        value: 'TBD',
-        specs: specsStr || rfq.specifications.map((s) => `${s.label}: ${s.value}`).join(', '),
-        buyer: buyerName,
-        description: rfq.description || undefined,
-        aiChat: conversationHistory,
-      });
-      // Relink reference images: temp rfqId → real RFQ id
-      if (tempRfqId && realId) {
-        try {
-          await fetch('/api/rfq-images/relink', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tempId: tempRfqId, realId }),
-          });
-        } catch (e) {
-          console.warn('Reference image relink failed (non-blocking):', e);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to submit RFQ to Admin', err);
-    }
-
-
-    // Delete draft on finalize
-    if (draftId) {
-      try {
-        await deleteDraftRFQ(draftId);
-      } catch {
-        // Non-critical — draft cleanup failure shouldn't block finalization
-      }
-    }
-
-    setFinalized(true);
-    toast.success('RFQ finalized! Product added to your list.');
-    setTimeout(() => router.push('/products-list'), 1200);
-  };
-
-  // Issue #10: pre-fill input with old answer so user can correct it
-  const handleCorrect = useCallback((oldText: string) => {
-    setInputValue(oldText);
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
-
-  const isDisabled = isStreaming || isProcessing;
-
-  return (
-    <div className="relative h-screen bg-white flex flex-col overflow-hidden">
-      <Toaster
-        position="top-right"
-        toastOptions={{ style: { fontSize: '13px', borderRadius: '10px', fontFamily: 'inherit' } }}
-      />
-
-      {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-gray-100 bg-white z-10 flex-shrink-0">
-        <Link
-          href="/products-list"
-          className="flex items-center gap-1 text-sm text-gray-400 hover:text-[#0D0D14] transition-colors whitespace-nowrap"
-        >
-          <span className="text-base leading-none">‹</span>{' '}
-          <span className="hidden sm:inline">Back</span>
-        </Link>
-        <div className="flex-1 min-w-0">
-          <input
-            value={rfqTitle}
-            onChange={(e) => setRfqTitle(e.target.value)}
-            className="w-full text-sm font-semibold text-[#0D0D14] bg-transparent outline-none border-b border-primary pb-0.5 truncate placeholder:text-gray-300"
-            placeholder="Product RFQ title…"
-          />
-        </div>
-        {/* Save Draft button */}
-        {!finalized && (
-          <button
-            onClick={() => triggerDraftSave()}
-            disabled={draftSaving || messages.length < 2}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0 ${
-              draftSaved
-                ? 'bg-green-50 text-green-600 border border-green-200'
-                : draftSaving
-                  ? 'bg-gray-50 text-gray-400 border border-gray-200'
-                  : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
-            } disabled:opacity-40 disabled:cursor-not-allowed`}
-            title="Save as draft"
-          >
-            {draftSaved ? (
-              <><CheckCircle size={12} /> Saved</>
-            ) : draftSaving ? (
-              <><Loader2 size={12} className="animate-spin" /> Saving…</>
-            ) : (
-              <><Save size={12} /> Save Draft</>
-            )}
-          </button>
-        )}
-        <button
-          onClick={() => setPanelOpen(!panelOpen)}
-          className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-[#0D0D14] hover:bg-gray-50 transition-colors"
-          title={panelOpen ? 'Hide RFQ panel' : 'Show RFQ panel'}
-        >
-          {panelOpen ? <EyeOff size={17} /> : <Eye size={17} />}
-        </button>
-      </div>
-
-      {/* ── Body ── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* ── Left: Chat (always full width on mobile) ── */}
-        <div
-          className={`flex flex-col transition-all duration-300 ${panelOpen ? 'hidden md:flex md:w-[56%]' : 'w-full'} w-full`}
-        >
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-2xl mx-auto px-4 md:px-8 pt-5 md:pt-8 pb-4">
-              {messages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  onOptionClick={handleSend}
-                  onCorrect={msg.role === 'user' ? handleCorrect : undefined}
-                  isLoading={isDisabled}
-                />
-              ))}
-              {isDisabled && messages[messages.length - 1]?.role === 'user' && <TypingIndicator />}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-
-          {/* ── Input area ── */}
-          <div className="flex-shrink-0 border-t border-gray-100 bg-white">
-            <div className="max-w-2xl mx-auto px-3 md:px-8 py-3 md:py-4">
-              <div className="border border-gray-200 rounded-2xl bg-white focus-within:border-gray-400 transition-colors duration-150 overflow-hidden">
-                <textarea
-                  ref={inputRef}
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend(inputValue);
-                    }
-                  }}
-                  placeholder="Type your answer or add more details…"
-                  rows={2}
-                  disabled={isDisabled}
-                  className="w-full px-4 pt-3.5 pb-1 text-sm text-[#0D0D14] placeholder:text-gray-300 outline-none resize-none bg-transparent disabled:opacity-50 leading-relaxed"
-                />
-                <div className="flex items-center justify-between px-4 pb-3 pt-1">
-                  <button className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#0D0D14] transition-colors">
-                    <Paperclip size={12} /> <span className="hidden sm:inline">Add references</span>
-                  </button>
-                  <button
-                    onClick={() => handleSend(inputValue)}
-                    disabled={!inputValue.trim() || isDisabled}
-                    className="w-7 h-7 rounded-full bg-[#0D0D14] text-white flex items-center justify-center transition-all duration-150 disabled:opacity-25 disabled:cursor-not-allowed hover:bg-[#1a1a26] active:scale-95 flex-shrink-0"
-                  >
-                    {isDisabled ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <ArrowUp size={13} />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Right: RFQ panel ── */}
-        {panelOpen && (
-          <div className="flex-1 overflow-hidden border-l border-gray-100 flex flex-col">
-            <RFQPanel
-              rfq={rfq}
-              rfqTitle={rfqTitle}
-              finalized={finalized}
-              isLoading={isDisabled}
-              onFinalize={handleFinalize}
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Helper ───────────────────────────────────────────────────────────────────
-function deriveProductName(text: string): string {
+export function deriveProductName(text: string): string {
   const words = text.split(' ').slice(0, 8).join(' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
@@ -2580,6 +1561,8 @@ export default function NewProductFlow() {
   const [productText, setProductText] = useState('');
   const [rfqMethod, setRfqMethod] = useState<RFQMethod>('scratch');
   const [draftId, setDraftId] = useState<string | undefined>();
+  // C3 FIX: capture selected images from ImageSearchStep to pass to BuilderStep
+  const [selectedImages, setSelectedImages] = useState<any[]>([]);
   // Stable RFQ ID generated once — links reference images to this RFQ before submission
   const [rfqId] = useState(() => `rfq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
@@ -2620,13 +1603,40 @@ export default function NewProductFlow() {
     setStep('extracting');
   };
 
-  // Extraction complete → show review
+  // Extraction complete → convert to legacy format for ReviewStep, then show review
   const handleExtractionComplete = (rfqData: Partial<RFQData>, text: string) => {
-    setExtractedRfqData(rfqData);
+    // C6 FIX: if extraction returns RFQState format (product.name exists but productName doesn't),
+    // convert to legacy RFQData shape that ReviewStep expects
+    let legacyData: Partial<RFQData> = rfqData;
+    if (rfqData && (rfqData as any).product?.name && !rfqData.productName) {
+      const state = rfqData as any;
+      legacyData = {
+        productName: state.product?.name?.value || '',
+        category: state.product?.classification?.broad_category || '',
+        moq: state.quantity?.value?.value || '',
+        description: state.product?.description?.value || '',
+        specifications: Object.entries(state.specifications || {}).map(([k, v]: [string, any]) => ({
+          label: k.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+          value: v?.value || '',
+          pending: !v?.value,
+        })),
+        manufacturingNotes: Object.entries(state.manufacturing || {}).map(([k, v]: [string, any]) => ({
+          label: k.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+          value: v?.value || '',
+          pending: !v?.value,
+        })),
+        commercialTerms: Object.entries(state.commercial || {}).map(([k, v]: [string, any]) => ({
+          label: k.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+          value: v?.value || '',
+          pending: !v?.value,
+        })),
+        missingFields: [],
+      };
+    }
+    setExtractedRfqData(legacyData);
     setExtractedText(text);
-    // Use extracted product name as productText if we don't have one yet
     if (!productText || productText === '') {
-      setProductText(rfqData.productName || rfqData.description || 'Uploaded RFQ');
+      setProductText(legacyData.productName || legacyData.description || 'Uploaded RFQ');
     }
     setStep('review');
   };
@@ -2726,7 +1736,8 @@ export default function NewProductFlow() {
       <ImageSearchStep
         productText={productText}
         rfqId={rfqId}
-        onNext={() => setStep('builder')}
+        // C3 FIX: capture selected images instead of ignoring them
+        onNext={(imgs) => { setSelectedImages(imgs || []); setStep('builder'); }}
         onSkip={() => setStep('builder')}
       />
     );
@@ -2775,6 +1786,8 @@ export default function NewProductFlow() {
       productName={productName}
       draftId={draftId}
       tempRfqId={rfqId}
+      // C3 FIX: pass through selected inspiration images
+      selectedImages={selectedImages}
       prefilledRfq={extractedRfqData || undefined}
     />
   );
