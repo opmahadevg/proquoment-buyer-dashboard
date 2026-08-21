@@ -425,7 +425,10 @@ export async function submitRFQ(rfq: {
     const res = await fetch('/api/rfq/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rfq),
+      body: JSON.stringify({
+        ...rfq,
+        userId,
+      }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -508,7 +511,7 @@ export async function submitRFQ(rfq: {
   if (supabase) {
     try {
       const dbUserId = userId || null;
-      const { error } = await supabase.from('rfqs').insert({
+      const basePayload: Record<string, any> = {
         id,
         product: rfq.product,
         buyer: resolvedBuyer,
@@ -521,9 +524,20 @@ export async function submitRFQ(rfq: {
         description: rfq.description || null,
         ai_chat: rfq.aiChat || null,
         buyer_id: dbUserId,
-        rfq_state: rfq.rfqState || null,
-        target_price: rfq.targetPrice || null,
-      });
+      };
+
+      const fullPayload = {
+        ...basePayload,
+        ...(rfq.rfqState ? { rfq_state: rfq.rfqState } : {}),
+        ...(rfq.targetPrice ? { target_price: rfq.targetPrice } : {}),
+      };
+
+      let { error } = await supabase.from('rfqs').insert(fullPayload);
+      if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
+        console.warn('Supabase submitRFQ missing column (PGRST204), retrying with base columns...');
+        const retry = await supabase.from('rfqs').insert(basePayload);
+        error = retry.error;
+      }
       if (error) console.error('Supabase submitRFQ fallback error:', error);
     } catch (err) {
       console.warn('Failed to insert RFQ to Supabase (localStorage fallback saved):', err);

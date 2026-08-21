@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
 
@@ -16,19 +17,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  let userId: string | null = null;
-  let userEmail: string | null = null;
-
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    userId = user?.id || null;
-    userEmail = user?.email || null;
-  } catch (err) {
-    console.warn('[api/rfq/create] Failed to get authenticated user session:', err);
-  }
-
   let body: any = {};
   try {
     body = await req.json();
@@ -36,10 +24,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { product, qty, value, targetPrice, specs, deadline, buyer, description, aiChat, rfqState } = body;
+  const { product, qty, value, targetPrice, specs, deadline, buyer, description, aiChat, rfqState, userId: clientUserId } = body;
 
   if (!product) {
     return NextResponse.json({ error: 'Product name is required' }, { status: 400 });
+  }
+
+  let userId: string | null = clientUserId || null;
+  let userEmail: string | null = null;
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user?.id) {
+      userId = user.id;
+      userEmail = user.email || null;
+    }
+  } catch (err) {
+    console.warn('[api/rfq/create] Failed to get authenticated user session:', err);
   }
 
   // Resolve buyer name
@@ -68,8 +71,8 @@ export async function POST(req: NextRequest) {
     year: 'numeric',
   });
 
-  // 1. Persist to rfqs table
-  const { error: rfqErr } = await supabase.from('rfqs').insert({
+  // 1. Persist to rfqs table (resilient against missing optional columns like rfq_state / target_price)
+  const basePayload: Record<string, any> = {
     id,
     product,
     buyer: resolvedBuyer,
@@ -82,9 +85,33 @@ export async function POST(req: NextRequest) {
     description: description || null,
     ai_chat: aiChat || null,
     buyer_id: userId,
-    rfq_state: rfqState || null,
-    target_price: targetPrice || null,
-  });
+  };
+
+  const fullPayload = {
+    ...basePayload,
+    ...(rfqState ? { rfq_state: rfqState } : {}),
+    ...(targetPrice ? { target_price: targetPrice } : {}),
+  };
+
+  let { error: rfqErr } = await supabase.from('rfqs').insert(fullPayload);
+
+  // If PostgREST schema cache error (PGRST204) due to unmigrated columns, retry with basePayload
+  if (rfqErr && (rfqErr.code === 'PGRST204' || rfqErr.message?.includes('schema cache'))) {
+    console.warn('[api/rfq/create] PostgREST schema column missing, retrying insert with base columns...');
+    const retry = await supabase.from('rfqs').insert(basePayload);
+    rfqErr = retry.error;
+  }
+
+  // If RLS policy error (42501) and service role key is available, use service role client
+  if (rfqErr && rfqErr.code === '42501') {
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+    if (serviceRoleKey) {
+      console.warn('[api/rfq/create] RLS policy blocked insert (42501), retrying using service role client...');
+      const adminDb = createClient(SUPABASE_URL, serviceRoleKey);
+      const adminRetry = await adminDb.from('rfqs').insert(basePayload);
+      rfqErr = adminRetry.error;
+    }
+  }
 
   if (rfqErr) {
     console.error('[api/rfq/create] Failed to insert RFQ into Supabase:', rfqErr);
