@@ -91,6 +91,7 @@ function ImageCard({
           <img
             src={src}
             alt={img.title}
+            referrerPolicy="no-referrer"
             className={`w-full h-full object-contain transition-all duration-300 ${
               loaded ? 'opacity-100' : 'opacity-0'
             }`}
@@ -166,6 +167,7 @@ function SelectedRow({
         <img
           src={item.original || item.thumbnail}
           alt={item.title}
+          referrerPolicy="no-referrer"
           className="w-full h-full object-contain"
           onError={(e) => {
             const t = e.target as HTMLImageElement;
@@ -375,7 +377,15 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
           </div>
 
           {/* Search bar */}
-          <div className="flex gap-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (query.trim() && !loading) {
+                doSearch(query, false);
+              }
+            }}
+            className="flex gap-2"
+          >
             <div className="flex-1 flex items-center gap-2 bg-white border border-[var(--border)] rounded-xl px-3.5 py-2.5 focus-within:border-[var(--primary)]/50 focus-within:ring-2 focus-within:ring-[var(--primary)]/10 transition-all">
               <Search size={15} className="text-[var(--muted-foreground)] flex-shrink-0" />
               <input
@@ -383,16 +393,15 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    doSearch(query, true);
-                  }
-                }}
                 placeholder="Describe what you're looking for…"
                 className="flex-1 text-sm bg-transparent outline-none text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]"
               />
               {query && (
-                <button onClick={() => setQuery('')} className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                >
                   <X size={13} />
                 </button>
               )}
@@ -400,7 +409,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
 
             {/* AI Refine button */}
             <button
-              onClick={() => doSearch(query, false)}
+              type="submit"
               disabled={loading || !query.trim()}
               title="AI-refine and search"
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary)]/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm shadow-primary/30"
@@ -415,6 +424,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
 
             {/* Manual search */}
             <button
+              type="button"
               onClick={() => doSearch(query, true)}
               disabled={loading || !query.trim()}
               title="Search without AI refinement"
@@ -422,7 +432,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
             >
               <Search size={15} />
             </button>
-          </div>
+          </form>
 
 
 
@@ -602,6 +612,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
                   <img
                     src={s.original || s.thumbnail}
                     alt=""
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-contain"
                     onError={(e) => {
                       const t = e.target as HTMLImageElement;

@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const SERPAPI_KEY = process.env.SERPAPI_KEY;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-
 // ─── Content safety ───────────────────────────────────────────────────────────
 const BLOCKED_DOMAINS = [
   'shutterstock.com', 'alamy.com', 'dreamstime.com', 'depositphotos.com',
@@ -21,17 +18,19 @@ const BLOCKED_TITLE_KEYWORDS = [
   'illegal', 'piracy', 'torrent', 'crack', 'keygen',
 ];
 
-function isDomainBlocked(source: string): boolean {
+function isDomainBlocked(source?: string): boolean {
+  if (!source) return false;
   const s = source.toLowerCase();
   return BLOCKED_DOMAINS.some((d) => s.includes(d));
 }
 
-function isTitleBlocked(title: string): boolean {
+function isTitleBlocked(title?: string): boolean {
+  if (!title) return false;
   const t = title.toLowerCase();
   return BLOCKED_TITLE_KEYWORDS.some((kw) => t.includes(kw));
 }
 
-interface RawSerpImage {
+interface RawImage {
   title?: string;
   thumbnail?: string;
   original?: string;
@@ -39,7 +38,7 @@ interface RawSerpImage {
   link?: string;
 }
 
-function deduplicate(images: RawSerpImage[]): RawSerpImage[] {
+function deduplicate(images: RawImage[]): RawImage[] {
   const seen = new Set<string>();
   return images.filter((img) => {
     const key = (img.title || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
@@ -52,59 +51,128 @@ function deduplicate(images: RawSerpImage[]): RawSerpImage[] {
 
 // ─── LLM query refinement ─────────────────────────────────────────────────────
 async function refineQuery(rawQuery: string): Promise<string> {
-  if (!OPENROUTER_API_KEY) return rawQuery;
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return rawQuery;
+
+  const candidateModels = [
+    'google/gemini-2.5-flash',
+    'openai/gpt-4o-mini',
+    'meta-llama/llama-3.3-70b-instruct',
+  ];
+
+  for (const model of candidateModels) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://proquoment.com',
+          'X-Title': 'Proquoment Image Search',
+        },
+        signal: AbortSignal.timeout(3500),
+        body: JSON.stringify({
+          model,
+          max_tokens: 30,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a Google Images search optimizer for B2B product sourcing. Rewrite the user product request into a precise image search query for clean product photography. Output ONLY the search query string, maximum 6 words, no quotation marks.',
+            },
+            { role: 'user', content: rawQuery },
+          ],
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const refined = json.choices?.[0]?.message?.content?.trim().replace(/^["']|["']$/g, '');
+        if (refined && refined.length > 2) {
+          return refined;
+        }
+      }
+    } catch {
+      // Continue to next model fallback
+    }
+  }
+
+  return rawQuery;
+}
+
+// ─── Fallback Providers (DuckDuckGo & Wikimedia) ───────────────────────────────
+async function searchDuckDuckGo(query: string): Promise<RawImage[]> {
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(3000),
-      body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-001',
-        max_tokens: 60,
-        messages: [
-          {
-            role: 'system',
-            content: `You are a Google Images search optimizer for B2B product sourcing. Rewrite user product request into a precise image search query. Output ONLY the query string, max 8 words.`,
-          },
-          { role: 'user', content: rawQuery },
-        ],
-      }),
-    });
-    if (!res.ok) return rawQuery;
-    const json = await res.json();
-    const refined = json.choices?.[0]?.message?.content?.trim();
-    return refined || rawQuery;
+    const tokenRes = await fetch(
+      `https://duckduckgo.com/?q=${encodeURIComponent(query + ' product photography')}`,
+      {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        signal: AbortSignal.timeout(6000),
+      }
+    );
+    const html = await tokenRes.text();
+    const vqdMatch = html.match(/vqd=([0-9-]+)/);
+    if (!vqdMatch) return [];
+
+    const imgRes = await fetch(
+      `https://duckduckgo.com/i.js?q=${encodeURIComponent(query + ' product photography')}&o=json&vqd=${vqdMatch[1]}`,
+      {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        signal: AbortSignal.timeout(6000),
+      }
+    );
+    if (!imgRes.ok) return [];
+
+    const data = await imgRes.json();
+    const results = data.results || [];
+    return results
+      .filter((r: any) => r.thumbnail && r.image)
+      .map((r: any) => ({
+        title: r.title || query,
+        thumbnail: r.thumbnail || r.image,
+        original: r.image || r.thumbnail,
+        source: r.url || r.image,
+      }));
   } catch {
-    return rawQuery;
+    return [];
   }
 }
 
-// ─── High-quality fallback images ─────────────────────────────────────────────
-function getFallbackImages(query: string) {
-  const samplePhotoIds = [
-    'photo-1542291026-7eec264c27ff', // Red sports shoe
-    'photo-1595950653106-6c9ebd614d3a', // Sneaker
-    'photo-1525966222134-fcfa99b8ae77', // Vans style
-    'photo-1560769629-975ec94e6a86', // Shoes
-    'photo-1512374382149-233c42b6a83b', // Sneaker
-    'photo-1584735935682-2f2b69dff9d2', // Athletic shoe
-    'photo-1539185441755-769473a23570', // Running shoe
-    'photo-1606107557195-0e29a4b5b4aa', // Nike shoe
-    'photo-1600185365483-26d7a4cc7519', // Sport shoe
-    'photo-1582588678413-dbf45f4823e9', // White sneaker
-    'photo-1515955656352-a1fa3ffcd111', // Blue shoe
-    'photo-1460353581641-37baddab0fa2', // Running shoe
-  ];
+async function searchWikimedia(query: string): Promise<RawImage[]> {
+  try {
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
+      query + ' product'
+    )}&gsrnamespace=6&gsrlimit=20&prop=imageinfo&iiprop=url|thumbmime|mime&iiurlwidth=600&format=json&origin=*`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return [];
 
-  return samplePhotoIds.map((id, i) => ({
-    position: i,
-    title: `${query || 'Product'} Option ${i + 1}`,
-    thumbnail: `https://images.unsplash.com/${id}?auto=format&fit=crop&w=400&q=80`,
-    original: `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1000&q=80`,
-  }));
+    const data = await res.json();
+    const pages = Object.values(data.query?.pages || {});
+    return pages
+      .map((p: any) => {
+        const info = p.imageinfo?.[0];
+        if (!info || !info.thumburl) return null;
+        const title = (p.title || '')
+          .replace(/^File:/i, '')
+          .replace(/\.[^/.]+$/, '')
+          .replace(/_/g, ' ');
+        return {
+          title: title || query,
+          thumbnail: info.thumburl,
+          original: info.url || info.thumburl,
+          source: 'wikimedia.org',
+        };
+      })
+      .filter(Boolean) as RawImage[];
+  } catch {
+    return [];
+  }
 }
 
 // ─── Simple rate limiter ──────────────────────────────────────────────────────
@@ -112,7 +180,7 @@ const requestLog = new Map<string, number[]>();
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
   const window = 60_000;
-  const max = 20;
+  const max = 30;
   const timestamps = (requestLog.get(ip) || []).filter((t) => now - t < window);
   if (timestamps.length >= max) return true;
   timestamps.push(now);
@@ -135,7 +203,7 @@ export async function POST(req: NextRequest) {
   }
 
   const raw = (body.query || '').trim();
-  const queryToUse = raw || 'sports shoes product photo';
+  const queryToUse = raw || 'commercial product photography';
 
   const refinedQuery = body.skipRefine || !raw ? queryToUse : await refineQuery(queryToUse);
 
@@ -143,55 +211,70 @@ export async function POST(req: NextRequest) {
   const effectiveQuery =
     !body.skipRefine && normalize(refinedQuery) === normalize(queryToUse) ? queryToUse : refinedQuery;
 
-  if (!SERPAPI_KEY) {
-    console.warn('SERPAPI_KEY not configured, using fallback product images.');
-    return NextResponse.json({ images: getFallbackImages(effectiveQuery), refinedQuery: effectiveQuery });
+  const serpApiKey = process.env.SERPAPI_KEY;
+  let rawResults: RawImage[] = [];
+
+  // Primary: SerpAPI Google Images
+  if (serpApiKey) {
+    try {
+      const serpUrl = new URL('https://serpapi.com/search.json');
+      serpUrl.searchParams.set('engine', 'google_images');
+      serpUrl.searchParams.set('q', effectiveQuery);
+      serpUrl.searchParams.set('num', '30');
+      serpUrl.searchParams.set('safe', 'active');
+      serpUrl.searchParams.set('api_key', serpApiKey);
+
+      const serpRes = await fetch(serpUrl.toString(), {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12000),
+      });
+
+      if (serpRes.ok) {
+        const serpData = await serpRes.json();
+        const imagesResults = serpData.images_results || [];
+        rawResults = imagesResults.map((img: any) => ({
+          title: img.title,
+          thumbnail: img.thumbnail,
+          original: img.original || img.thumbnail,
+          source: img.source || img.link,
+        }));
+      } else {
+        console.warn('SerpAPI non-200 status:', serpRes.status);
+      }
+    } catch (err) {
+      console.warn('SerpAPI search error or timeout:', err);
+    }
   }
 
-  const serpUrl = new URL('https://serpapi.com/search.json');
-  serpUrl.searchParams.set('engine', 'google_images');
-  serpUrl.searchParams.set('q', effectiveQuery);
-  serpUrl.searchParams.set('num', '30');
-  serpUrl.searchParams.set('safe', 'active');
-  serpUrl.searchParams.set('api_key', SERPAPI_KEY);
-
-  try {
-    const serpRes = await fetch(serpUrl.toString(), {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (!serpRes.ok) {
-      console.warn('SerpAPI returned non-200 status:', serpRes.status);
-      return NextResponse.json({ images: getFallbackImages(effectiveQuery), refinedQuery: effectiveQuery });
-    }
-
-    const serpData = await serpRes.json();
-    const rawResults: RawSerpImage[] = serpData.images_results || [];
-
-    const safeResults = rawResults.filter((img) => {
-      if (!img.thumbnail) return false;
-      if (isDomainBlocked(img.source || img.link || '')) return false;
-      if (isTitleBlocked(img.title || '')) return false;
-      return true;
-    });
-
-    const deduped = deduplicate(safeResults);
-
-    const images = deduped.slice(0, 15).map(({ title, thumbnail, original }, i) => ({
-      position: i,
-      title: title || '',
-      thumbnail: thumbnail || '',
-      original: original || thumbnail || '',
-    }));
-
-    if (images.length === 0) {
-      return NextResponse.json({ images: getFallbackImages(effectiveQuery), refinedQuery: effectiveQuery });
-    }
-
-    return NextResponse.json({ images, refinedQuery: effectiveQuery });
-  } catch (err) {
-    console.warn('SerpAPI search error, using fallbacks:', err);
-    return NextResponse.json({ images: getFallbackImages(effectiveQuery), refinedQuery: effectiveQuery });
+  // Fallback 1: DuckDuckGo dynamic image search
+  if (rawResults.length === 0) {
+    rawResults = await searchDuckDuckGo(effectiveQuery);
   }
+
+  // Fallback 2: Wikimedia Commons dynamic image search
+  if (rawResults.length === 0) {
+    rawResults = await searchWikimedia(effectiveQuery);
+  }
+
+  const safeResults = rawResults.filter((img) => {
+    if (!img.thumbnail) return false;
+    if (isDomainBlocked(img.source || img.original || img.link)) return false;
+    if (isTitleBlocked(img.title)) return false;
+    return true;
+  });
+
+  const deduped = deduplicate(safeResults);
+
+  const images = deduped.slice(0, 18).map(({ title, thumbnail, original }, i) => ({
+    position: i,
+    title: title || `${effectiveQuery} Option ${i + 1}`,
+    thumbnail: thumbnail || '',
+    original: original || thumbnail || '',
+  }));
+
+  return NextResponse.json({
+    images,
+    refinedQuery: effectiveQuery,
+    total: images.length,
+  });
 }
