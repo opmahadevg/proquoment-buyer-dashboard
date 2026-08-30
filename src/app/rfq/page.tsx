@@ -36,19 +36,9 @@ export default function RFQPage() {
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [drafts, setDrafts] = useState<RFQDraft[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedRfq, setSelectedRfq] = useState<RFQ | null>(null);
   const [activeTab, setActiveTab] = useState<'submitted' | 'drafts'>('submitted');
-  const [form, setForm] = useState({
-    product: '',
-    qty: '',
-    value: '',
-    targetPrice: '',
-    specs: '',
-    deadline: '',
-    buyer: '',
-  });
 
   useEffect(() => {
     loadRFQs();
@@ -132,31 +122,6 @@ export default function RFQPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.product || !form.qty) {
-      toast.error('Product and quantity are required');
-      return;
-    }
-    try {
-      const id = await submitRFQ(form);
-      toast.success(`RFQ ${id} submitted — Admin notified`);
-      setShowForm(false);
-      setForm({
-        product: '',
-        qty: '',
-        value: '',
-        targetPrice: '',
-        specs: '',
-        deadline: '',
-        buyer: '',
-      });
-      loadRFQs();
-    } catch (err) {
-      toast.error('Failed to submit RFQ');
-    }
-  };
-
   const filtered = rfqs.filter(
     (r) =>
       !search ||
@@ -186,7 +151,7 @@ export default function RFQPage() {
             </p>
           </div>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => router.push('/new-product')}
             className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-[#2e29c4] active:scale-95 transition-all"
           >
             <Plus size={16} /> Submit New RFQ
@@ -401,125 +366,6 @@ export default function RFQPage() {
 
         {/* RFQ Detail Drawer */}
         {selectedRfq && <RFQDetail rfq={selectedRfq} onClose={() => setSelectedRfq(null)} />}
-
-        {/* ── Submit RFQ Modal ── */}
-        {showForm && (
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
-            onClick={() => setShowForm(false)}
-          >
-            <div
-              className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="text-lg font-bold mb-1">Submit Request for Quote</h2>
-              <p className="text-xs text-[var(--muted-foreground)] mb-5">
-                Admin will review and match you with qualified suppliers
-              </p>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1 uppercase">
-                    Product Name *
-                  </label>
-                  <input
-                    value={form.product}
-                    onChange={(e) => setForm({ ...form, product: e.target.value })}
-                    placeholder="e.g. Organic Cotton T-Shirts"
-                    className="w-full px-3 py-2.5 border border-[var(--border)] rounded-lg text-sm"
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1 uppercase">
-                      Quantity *
-                    </label>
-                    <input
-                      value={form.qty}
-                      onChange={(e) => setForm({ ...form, qty: e.target.value })}
-                      placeholder="5,000 pcs"
-                      className="w-full px-3 py-2.5 border border-[var(--border)] rounded-lg text-sm"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1 uppercase">
-                      Estimated Value
-                    </label>
-                    <input
-                      value={form.value}
-                      onChange={(e) => setForm({ ...form, value: e.target.value })}
-                      placeholder="$25,000"
-                      className="w-full px-3 py-2.5 border border-[var(--border)] rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1 uppercase">
-                      Target Price/Unit
-                    </label>
-                    <input
-                      value={form.targetPrice}
-                      onChange={(e) => setForm({ ...form, targetPrice: e.target.value })}
-                      placeholder="$5.00"
-                      className="w-full px-3 py-2.5 border border-[var(--border)] rounded-lg text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1 uppercase">
-                      Deadline
-                    </label>
-                    <input
-                      type="date"
-                      value={form.deadline}
-                      onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-[var(--border)] rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1 uppercase">
-                    Buyer Name / Company
-                  </label>
-                  <input
-                    value={form.buyer}
-                    onChange={(e) => setForm({ ...form, buyer: e.target.value })}
-                    placeholder="Your company"
-                    className="w-full px-3 py-2.5 border border-[var(--border)] rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[var(--muted-foreground)] mb-1 uppercase">
-                    Specifications / Notes
-                  </label>
-                  <textarea
-                    value={form.specs}
-                    onChange={(e) => setForm({ ...form, specs: e.target.value })}
-                    placeholder="Material, color, certifications, packaging requirements..."
-                    rows={3}
-                    className="w-full px-3 py-2.5 border border-[var(--border)] rounded-lg text-sm resize-none"
-                  />
-                </div>
-                <div className="flex gap-3 justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowForm(false)}
-                    className="px-4 py-2 text-sm font-medium border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-[#2e29c4] transition-colors"
-                  >
-                    <Send size={14} /> Submit RFQ
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
     </AppLayout>
   );

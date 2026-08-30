@@ -1105,7 +1105,7 @@ function UploadStep({
 const EXTRACTION_TASKS = [
   { id: '1', label: 'Reading uploaded documents', detail: 'Parsing PDF text layers & images' },
   { id: '2', label: 'Extracting text & tables', detail: 'Identifying specifications and figures' },
-  { id: '3', label: 'Running AI analysis', detail: 'Recognizing product fields with OpenRouter' },
+  { id: '3', label: 'Running AI analysis', detail: 'Recognizing product fields' },
   { id: '4', label: 'Building your RFQ', detail: 'Structuring data into Proquoment format' },
 ];
 
@@ -1117,7 +1117,7 @@ function ExtractionStep({
 }: {
   files: File[];
   method: RFQMethod;
-  onComplete: (rfqData: Partial<RFQData>, extractedText: string) => void;
+  onComplete: (rfqData: Partial<RFQData>, extractedText: string, designQuery?: string, designAttributes?: string[]) => void;
   onError: (message: string) => void;
 }) {
   const [activeTask, setActiveTask] = useState('1');
@@ -1171,7 +1171,12 @@ function ExtractionStep({
         advance('4', null, `Done! Extracted ${data.filesProcessed} file${data.filesProcessed !== 1 ? 's' : ''}.`);
 
         await new Promise((r) => setTimeout(r, 700));
-        onComplete(data.rfqData as Partial<RFQData>, data.extractedText || '');
+        onComplete(
+          data.rfqData as Partial<RFQData>,
+          data.extractedText || '',
+          data.designQuery || '',
+          data.designAttributes || []
+        );
       } catch (err: any) {
         onError(err?.message || 'An unexpected error occurred during extraction.');
       }
@@ -1570,6 +1575,8 @@ export default function NewProductFlow() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [extractedRfqData, setExtractedRfqData] = useState<Partial<RFQData> | null>(null);
   const [extractedText, setExtractedText] = useState('');
+  // ── Isolated product+design query from extraction (for accurate image search) ──
+  const [extractionDesignQuery, setExtractionDesignQuery] = useState('');
 
   // ── Check for draft query param on mount ──
   useEffect(() => {
@@ -1583,9 +1590,29 @@ export default function NewProductFlow() {
 
   const productName = deriveProductName(productText);
 
-  const handleChoose = (method: RFQMethod) => {
+  const handleChoose = async (method: RFQMethod) => {
     setRfqMethod(method);
     if (method === 'scratch') {
+      // Isolate product+design from mixed front-page text before image search
+      // (strips location, incoterms, payment, quantity — keeps product+material+color+specs)
+      if (productText.trim().length > 30) {
+        try {
+          const isoRes = await fetch('/api/ai/isolate-product', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: productText }),
+          });
+          if (isoRes.ok) {
+            const isoData = await isoRes.json();
+            if (isoData.designQuery && isoData.designQuery.trim()) {
+              setProductText(isoData.designQuery);
+            }
+          }
+        } catch {
+          // Fallback: use raw productText — image search still works, just less precise
+          console.warn('[NewProductFlow] Product isolation failed, using raw text for image search');
+        }
+      }
       setStep('image-search');
     } else {
       setStep('upload');
@@ -1604,7 +1631,7 @@ export default function NewProductFlow() {
   };
 
   // Extraction complete → convert to legacy format for ReviewStep, then show review
-  const handleExtractionComplete = (rfqData: Partial<RFQData>, text: string) => {
+  const handleExtractionComplete = (rfqData: Partial<RFQData>, text: string, designQuery?: string, designAttributes?: string[]) => {
     // C6 FIX: if extraction returns RFQState format (product.name exists but productName doesn't),
     // convert to legacy RFQData shape that ReviewStep expects
     let legacyData: Partial<RFQData> = rfqData;
@@ -1635,6 +1662,37 @@ export default function NewProductFlow() {
     }
     setExtractedRfqData(legacyData);
     setExtractedText(text);
+    // Store the isolated product+design query for accurate image search
+    if (designQuery) {
+      setExtractionDesignQuery(designQuery);
+    }
+
+    // Auto-carry buyer's uploaded image files directly as reference images!
+    const imageFiles = uploadedFiles.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(f.name));
+    if (imageFiles.length > 0) {
+      Promise.all(
+        imageFiles.map(file => new Promise<{ original: string; thumbnail: string; title: string; position: number }>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            resolve({
+              original: dataUrl,
+              thumbnail: dataUrl,
+              title: file.name,
+              position: 0,
+            });
+          };
+          reader.onerror = () => resolve({ original: '', thumbnail: '', title: file.name, position: 0 });
+          reader.readAsDataURL(file);
+        }))
+      ).then(converted => {
+        const validImgs = converted.filter(img => img.original);
+        if (validImgs.length > 0) {
+          setSelectedImages(validImgs);
+        }
+      });
+    }
+
     if (!productText || productText === '') {
       setProductText(legacyData.productName || legacyData.description || 'Uploaded RFQ');
     }
@@ -1702,17 +1760,25 @@ export default function NewProductFlow() {
     setTimeout(() => router.push('/products-list'), 1000);
   };
 
-  // From ReviewStep: "Refine with AI" — set exact product name from extracted RFQ, then image-search → builder
+  // From ReviewStep: "Refine with AI" — if user already uploaded real images, skip directly to builder!
   const handleRefineWithAI = () => {
-    // Prioritise the specific extracted product name over any generic intro text
-    const extractedName =
+    const searchQuery =
+      extractionDesignQuery ||
       extractedRfqData?.productName ||
       extractedRfqData?.description ||
       productText;
-    if (extractedName && extractedName !== productText) {
-      setProductText(extractedName);
+    if (searchQuery && searchQuery !== productText) {
+      setProductText(searchQuery);
     }
-    setStep('image-search');
+
+    // If buyer uploaded actual photos during extraction, pass them straight to BuilderStep!
+    // No need to force them into a generic text-to-image search.
+    const hasUploadedImages = uploadedFiles.some(f => f.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(f.name));
+    if (hasUploadedImages || selectedImages.length > 0) {
+      setStep('builder');
+    } else {
+      setStep('image-search');
+    }
   };
 
   if (step === 'intro') {

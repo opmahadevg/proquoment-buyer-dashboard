@@ -261,17 +261,32 @@ export default function BuilderStep({
     if (initialized || !productText) return;
     setInitialized(true);
 
+    // Map each reference image with explicit per-image attribute mapping
+    const imageDescriptions = selectedImages.map((img: any, i: number) => {
+      const note = img.note?.trim();
+      return note ? `Image ${i + 1}: ${note}` : `Image ${i + 1}: general style/design reference`;
+    });
+
+    const notesSummary = selectedImages
+      .map((img: any, i: number) => img.note?.trim() ? `Image ${i + 1}: "${img.note.trim()}"` : null)
+      .filter(Boolean)
+      .join(', ');
+
     const initialMsgText = selectedImages.length > 0
-      ? `Here are my inspiration images for ${productText}`
+      ? `Here are my inspiration images for ${productText}${notesSummary ? ` (${notesSummary})` : ''}`
       : productText;
 
     const imgList = selectedImages.map((img: any) => ({
       url: img.thumbnail || img.original,
       title: img.title || '',
+      note: img.note || '',
     }));
 
     const userContent = selectedImages.length > 0
-      ? `Here are my inspiration images for ${productText}. Please acknowledge them.`
+      ? `I am sourcing ONE single ${productText} that combines specific features from these ${selectedImages.length} reference images:
+${imageDescriptions.join('\n')}
+
+Please synthesize these references into ONE single custom product (e.g. borrow the size/silhouette from Image 1, and the color/material from Image 2 as specified).`
       : `I want to source the following product: ${productText}`;
 
     const initialHistory = [{ role: 'user', content: userContent, images: imgList.length > 0 ? imgList : undefined }];

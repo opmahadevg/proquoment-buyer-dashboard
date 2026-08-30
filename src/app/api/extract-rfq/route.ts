@@ -1,35 +1,43 @@
 /**
  * POST /api/extract-rfq
  *
- * Extraction pipeline:
+ * Upgraded extraction pipeline:
  *  1. Receive multipart form data (PDF/image files)
- *  2. For PDFs  → try pdf-parse text layer first
- *     If sparse  → run SerpAPI Google Lens OCR on converted image
- *  3. For images → run SerpAPI Google Lens OCR + visual matching
- *  4. Merge all extracted text
- *  5. Call OpenRouter LLM to produce structured RFQData JSON
- *  6. Return { rfqData, extractedText, extractionMethod, productImages }
+ *  2. For PDFs with text layer  -> pdf-parse text -> GPT-5.6-Luna -> structured JSON
+ *  3. For scanned/image PDFs    -> pdf2pic -> page images -> GPT-5.6-Luna vision -> JSON
+ *  4. For image files           -> base64 encode -> GPT-5.6-Luna vision -> JSON
+ *  5. After extraction          -> productIsolator -> focused designQuery for image search
+ *  6. Return { rfqData, extractedText, extractionMethod, designQuery, designAttributes }
+ *
+ * Key changes from previous version:
+ *  - SerpApi Google Lens REMOVED -- replaced by GPT-5.6-Luna vision (visionExtractor.ts)
+ *  - No Supabase temp upload needed -- images sent as base64
+ *  - Scanned PDFs now work via pdf2pic page conversion
+ *  - All LLM calls use GPT-5.6-Luna (was gpt-4o-mini) with Gemini 3.7 Flash fallback
+ *  - productDesignQuery added -- isolated product+design for accurate image search
  *
  * File size limit: 50 MB total batch
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { extractTextFromPdf, validateFile, fileToBuffer } from '@/lib/services/pdfExtractor';
-import { ocrImageBuffer, callGoogleLens, uploadImageForLens } from '@/lib/services/serpapi';
+import { extractTextFromPdf, validateFile, fileToBuffer, convertPdfPagesToImages } from '@/lib/services/pdfExtractor';
+import { extractWithVision, getMimeType, type ImageInput } from '@/lib/services/visionExtractor';
+import { isolateProductDesign } from '@/lib/services/productIsolator';
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB
 
-// Reuse the same structured JSON extraction prompt as NewProductFlow
-const EXTRACTION_SYSTEM_PROMPT = `You are a B2B procurement data extraction specialist for Proquoment.
+const FALLBACK_MODELS = [
+  'google/gemini-3.7-flash',
+  'openai/gpt-5.6-luna',
+];
 
-You will receive raw text extracted from uploaded documents (PDFs, spreadsheets, images) that a buyer has provided as their RFQ (Request for Quotation) or product specification sheet.
+// ── System prompt for text-layer PDF extraction (no vision needed) ─────────────
+const TEXT_EXTRACTION_SYSTEM_PROMPT = `You are a B2B procurement data extraction specialist for Proquoment.
 
-Extract ALL available product and procurement information and return ONLY a valid JSON object matching the new ProvenancedField schema. No explanations, no text, no markdown fences — just raw JSON.
+You will receive raw text extracted from uploaded documents (PDFs, spreadsheets) that a buyer provided as their RFQ or product specification.
+
+Extract ALL available product and procurement information and return ONLY a valid JSON object. No explanations, no markdown fences -- just raw JSON.
 
 The JSON must have this exact structure:
 {
@@ -43,37 +51,94 @@ The JSON must have this exact structure:
     "value": { "value": "5000 pcs", "source_type": "uploaded_document", "confidence": "high" }
   },
   "specifications": {
-    "Materials": { "value": "value", "source_type": "uploaded_document", "confidence": "high" }
+    "FieldName": { "value": "value with units", "source_type": "uploaded_document", "confidence": "high" }
   },
   "manufacturing": {},
-  "commercial": {}
+  "commercial": {},
+  "logistics": {},
+  "packaging": {}
 }
 
 Rules:
-- ONLY include fields where you found CLEAR information in the document. Do not include empty or "Pending" fields.
-- Always include units: mm, cm, g, kg, g/m², days, USD, %, etc.
-- Set "source_type": "uploaded_document" for all fields.
-- Set "confidence": "high" if clearly stated, "medium" if inferred.
-- Set "buyer_confirmed": true for all extracted fields, since the buyer uploaded this document.
+- ONLY include fields where you found CLEAR information. Do not include empty or Pending fields.
+- Always include units: mm, cm, g, kg, g/m2, days, USD, %, etc.
+- Set source_type to uploaded_document for all fields.
+- Set confidence to high if clearly stated, medium if inferred.
+- Set buyer_confirmed to true for all extracted fields.
 - Return ONLY the JSON object. Nothing else.`;
 
-type ExtractionMethod = 'text' | 'ocr' | 'mixed' | 'image-only';
+type ExtractionMethod = 'text' | 'vision' | 'mixed' | 'image-only';
 
 interface ExtractionResult {
   rfqData: any;
   extractedText: string;
   extractionMethod: ExtractionMethod;
-  productImages: string[];
+  designQuery: string;
+  designAttributes: string[];
   filesProcessed: number;
   pagesScanned: number;
 }
+
+// ── Text-layer LLM extraction (GPT-5.6-Luna) ──────────────────────────────────
+
+async function extractRfqFromText(text: string): Promise<any> {
+  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
+
+  let lastError = '';
+
+  for (const model of FALLBACK_MODELS) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://proquoment.com',
+          'X-Title': 'Proquoment RFQ Extraction',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: TEXT_EXTRACTION_SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: `Extract the RFQ data from the following document text:\n\n${text.slice(0, 12000)}`,
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 3000,
+          response_format: { type: 'json_object' },
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+
+      if (!res.ok) {
+        lastError = `${model} error ${res.status}: ${await res.text()}`;
+        console.warn('[extract-rfq] Text LLM', lastError, '-- trying fallback...');
+        continue;
+      }
+
+      const data = await res.json();
+      let jsonStr = (data.choices?.[0]?.message?.content || '').trim();
+      jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      return JSON.parse(jsonStr);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      console.warn(`[extract-rfq] Text extraction model ${model} failed:`, lastError);
+    }
+  }
+
+  throw new Error(`Text extraction failed after all fallbacks: ${lastError}`);
+}
+
+// ── Route handler ──────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!OPENROUTER_API_KEY) {
     return NextResponse.json({ error: 'OpenRouter API key not configured' }, { status: 503 });
   }
 
-  // ── Parse multipart form data ────────────────────────────────────────────────
+  // Parse multipart form data
   let formData: FormData;
   try {
     formData = await req.formData();
@@ -86,7 +151,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'No files provided' }, { status: 400 });
   }
 
-  // ── Validate total size ──────────────────────────────────────────────────────
+  // Validate total size
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
   if (totalSize > MAX_TOTAL_BYTES) {
     return NextResponse.json(
@@ -95,7 +160,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Validate individual files
   let cumulativeSize = 0;
   for (const file of files) {
     cumulativeSize += file.size;
@@ -105,21 +169,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // ── Create Supabase client (for image uploads) ──────────────────────────────
-  const cookieStore = await cookies();
-  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    cookies: {
-      getAll: () => cookieStore.getAll(),
-      setAll: (cs) =>
-        cs.forEach(({ name, value, options }) => cookieStore.set(name, value, options)),
-    },
-  });
-
-  // ── Process each file ────────────────────────────────────────────────────────
+  // Process each file
   const textChunks: string[] = [];
-  const productImages: string[] = [];
+  const visionImages: ImageInput[] = [];
   let usedTextExtraction = false;
-  let usedOcr = false;
+  let usedVision = false;
   let totalPages = 0;
 
   for (const file of files) {
@@ -129,55 +183,49 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const isImage = file.type.startsWith('image/');
 
       if (isPdf) {
-        // ── PDF: try text layer first ──────────────────────────────────────────
+        // Try text layer first
         const pdfResult = await extractTextFromPdf(buffer);
         totalPages += pdfResult.pageCount;
 
         if (!pdfResult.needsOcr && pdfResult.text.length > 0) {
-          // Good text layer — use it directly
+          // Good text layer -- use text extraction path
           textChunks.push(`[From: ${file.name}]\n${pdfResult.text}`);
           usedTextExtraction = true;
         } else {
-          // Scanned/image PDF — convert first page to image and OCR it
-          // Since PDF-to-image requires canvas/puppeteer (heavy deps), we upload the
-          // raw PDF as a data URL approach isn't possible. Instead, inform the user
-          // that this PDF appears to be scanned and provide what text we got.
+          // Sparse/scanned PDF -- convert pages to images for vision
           if (pdfResult.text.length > 0) {
-            textChunks.push(`[From: ${file.name} — partial text]\n${pdfResult.text}`);
-            usedTextExtraction = true;
+            // Include partial text as context for the vision model
+            textChunks.push(`[Partial text from: ${file.name}]\n${pdfResult.text}`);
           }
-          // For scanned PDFs, we attempt to upload the PDF first page as PNG
-          // by extracting a JPEG snapshot using the buffer's raw bytes
-          // This is a best-effort approach without heavy deps
-          const ocrNote = `[Note: ${file.name} appears to be a scanned document. Text extraction may be incomplete. Please ensure your PDF has a text layer for best results.]`;
-          textChunks.push(ocrNote);
-          usedOcr = true;
+
+          console.log(`[extract-rfq] ${file.name} is scanned/sparse -- converting pages to images for vision...`);
+          const pageImages = await convertPdfPagesToImages(buffer, 5);
+
+          if (pageImages.length > 0) {
+            for (const pi of pageImages) {
+              visionImages.push({ buffer: pi.buffer, filename: `${file.name}_page${pi.page}`, mimeType: pi.mimeType });
+            }
+            usedVision = true;
+            totalPages += pageImages.length;
+          } else {
+            // pdf2pic unavailable -- note it in text
+            textChunks.push(
+              `[Note: ${file.name} appears to be a scanned document. Install GraphicsMagick on the server for full scanned PDF support.]`
+            );
+          }
         }
       } else if (isImage) {
-        // ── Image: OCR via Google Lens ─────────────────────────────────────────
-        try {
-          const ocrResult = await ocrImageBuffer(buffer, file.name, supabase);
-          if (ocrResult.text) {
-            textChunks.push(`[From image: ${file.name}]\n${ocrResult.text}`);
-          }
-          // Collect visual product matches
-          for (const match of ocrResult.visualMatches.slice(0, 5)) {
-            if (match.thumbnail) productImages.push(match.thumbnail);
-          }
-          usedOcr = true;
-          totalPages += 1;
-        } catch (ocrErr) {
-          console.error(`[extract-rfq] OCR failed for ${file.name}:`, ocrErr);
-          textChunks.push(`[Could not extract text from image: ${file.name}]`);
-        }
+        // Image file -- add to vision batch (no SerpApi, no Supabase upload)
+        const mimeType = getMimeType(file.name) || (file.type as any) || 'image/png';
+        visionImages.push({ buffer, filename: file.name, mimeType });
+        usedVision = true;
+        totalPages += 1;
       } else if (
         file.name.toLowerCase().endsWith('.doc') ||
         file.name.toLowerCase().endsWith('.docx')
       ) {
-        // DOC/DOCX — we can't parse these without heavy deps
-        // Notify the user in the extracted text so the LLM can handle gracefully
         textChunks.push(
-          `[File: ${file.name} — Word documents require text copy-paste. Filename suggests: ${file.name.replace(/\.(docx?)$/i, '').replace(/[-_]/g, ' ')}]`
+          `[File: ${file.name} -- Word documents require text copy-paste. Filename suggests: ${file.name.replace(/\.(docx?)$/i, '').replace(/[-_]/g, ' ')}]`
         );
       }
     } catch (fileErr) {
@@ -186,70 +234,73 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const extractedText = textChunks.join('\n\n').trim();
+  // Determine extraction method
+  let extractionMethod: ExtractionMethod;
+  if (usedTextExtraction && usedVision) extractionMethod = 'mixed';
+  else if (usedVision) extractionMethod = files.every((f) => f.type.startsWith('image/')) ? 'image-only' : 'vision';
+  else extractionMethod = 'text';
 
-  if (!extractedText || extractedText.length < 20) {
+  const partialText = textChunks.join('\n\n').trim();
+
+  // Check we have something to work with
+  if (!partialText && visionImages.length === 0) {
     return NextResponse.json(
-      {
-        error:
-          'Could not extract meaningful text from the uploaded files. Please ensure PDFs have a text layer, or try uploading clearer images.',
-      },
+      { error: 'Could not extract meaningful content from the uploaded files. Ensure PDFs have a text layer or upload clearer images.' },
       { status: 422 }
     );
   }
 
-  // ── Determine extraction method ──────────────────────────────────────────────
-  let extractionMethod: ExtractionMethod;
-  if (usedTextExtraction && usedOcr) extractionMethod = 'mixed';
-  else if (usedOcr) extractionMethod = files.every((f) => f.type.startsWith('image/')) ? 'image-only' : 'ocr';
-  else extractionMethod = 'text';
-
-  // ── LLM: structured RFQ extraction ──────────────────────────────────────────
+  // Run extraction
   let rfqData: any = null;
-  try {
-    const llmRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://proquoment.com',
-        'X-Title': 'Proquoment RFQ Extraction',
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: `Extract the RFQ data from the following document text:\n\n${extractedText.slice(0, 12000)}`,
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 3000,
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
+  let extractedText = partialText;
+  let productDesignQuery = '';
+  let designAttributes: string[] = [];
 
-    if (!llmRes.ok) {
-      const errText = await llmRes.text();
-      throw new Error(`OpenRouter error ${llmRes.status}: ${errText}`);
+  try {
+    if (visionImages.length > 0) {
+      // Vision path: GPT-5.6-Luna vision for images (+ optional text context)
+      const visionResult = await extractWithVision(visionImages, partialText || undefined);
+      rfqData = visionResult.rfqData;
+      extractedText = visionResult.extractedText || partialText;
+      productDesignQuery = visionResult.productDesignQuery;
+      designAttributes = visionResult.designAttributes;
     }
 
-    const llmData = await llmRes.json();
-    const rawContent: string = llmData.choices?.[0]?.message?.content || '';
+    if (partialText && (extractionMethod === 'text' || extractionMethod === 'mixed')) {
+      // Text path: GPT-5.6-Luna text extraction for text-layer PDFs
+      const textRfqData = await extractRfqFromText(partialText);
 
-    // Strip markdown fences if LLM added them
-    let jsonStr = rawContent.trim();
-    jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      if (extractionMethod === 'mixed' && rfqData) {
+        // Merge: vision data takes precedence, text fills gaps
+        rfqData = mergeRfqData(textRfqData, rfqData);
+      } else {
+        rfqData = textRfqData;
+      }
+    }
 
-    rfqData = JSON.parse(jsonStr);
-  } catch (llmErr) {
-    console.error('[extract-rfq] LLM extraction failed:', llmErr);
+    if (!rfqData) {
+      throw new Error('No RFQ data could be extracted from the provided files');
+    }
+
+    // Post-extraction: isolate product+design for accurate image search
+    // Use the full extracted text for best isolation context
+    if (!productDesignQuery) {
+      const isolationInput = partialText || extractedText ||
+        rfqData?.product?.name?.value ||
+        rfqData?.product?.description?.value || '';
+
+      if (isolationInput) {
+        const isolated = await isolateProductDesign(isolationInput, rfqData);
+        productDesignQuery = isolated.designQuery;
+        designAttributes = isolated.designAttributes;
+      }
+    }
+
+  } catch (extractErr) {
+    const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
+    console.error('[extract-rfq] Extraction failed:', msg);
     return NextResponse.json(
-      {
-        error: 'AI extraction failed. Please try again.',
-        extractedText,
-      },
+      { error: 'AI extraction failed. Please try again.', details: msg, extractedText },
       { status: 500 }
     );
   }
@@ -258,10 +309,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     rfqData,
     extractedText,
     extractionMethod,
-    productImages: productImages.slice(0, 8),
+    designQuery: productDesignQuery,
+    designAttributes,
     filesProcessed: files.length,
     pagesScanned: totalPages,
   };
 
   return NextResponse.json(result);
+}
+
+// ── Merge RFQ data (vision overrides text for same fields) ─────────────────────
+
+function mergeRfqData(textData: any, visionData: any): any {
+  const merged: any = { ...textData };
+
+  for (const key of Object.keys(visionData)) {
+    if (!textData[key]) {
+      merged[key] = visionData[key];
+    } else if (typeof visionData[key] === 'object' && !Array.isArray(visionData[key])) {
+      merged[key] = { ...textData[key], ...visionData[key] };
+    } else {
+      // Vision takes precedence
+      merged[key] = visionData[key];
+    }
+  }
+
+  return merged;
 }

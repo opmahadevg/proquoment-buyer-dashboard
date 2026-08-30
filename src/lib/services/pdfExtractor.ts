@@ -1,7 +1,8 @@
 /**
  * PDF Extractor — server-side utility
- * Strategy: try text layer first (fast, free). If insufficient, caller should
- * fall back to image-based OCR via Google Lens.
+ * Strategy:
+ *  1. Try text layer first via pdf-parse (fast, free)
+ *  2. If sparse/scanned → convertPdfPagesToImages() then vision LLM
  */
 
 // Dynamically require pdf-parse to avoid Edge Runtime issues
@@ -90,4 +91,83 @@ export function validateFile(
 export async function fileToBuffer(file: File): Promise<Buffer> {
   const arrayBuffer = await file.arrayBuffer();
   return Buffer.from(arrayBuffer);
+}
+
+// ─── PDF-to-image conversion (for scanned PDFs) ──────────────────────────────
+
+export interface PdfPageImage {
+  buffer: Buffer;
+  page: number;
+  mimeType: 'image/png';
+}
+
+/**
+ * Convert the first N pages of a scanned PDF to PNG images using pdf2pic.
+ * These images can then be passed to extractWithVision() for vision-based OCR.
+ *
+ * Falls back to empty array if:
+ *  - pdf2pic is unavailable (serverless environments without GraphicsMagick)
+ *  - Conversion fails for any reason
+ *
+ * @param buffer    PDF file buffer
+ * @param maxPages  Maximum pages to convert (default: 5)
+ */
+export async function convertPdfPagesToImages(
+  buffer: Buffer,
+  maxPages: number = 5
+): Promise<PdfPageImage[]> {
+  try {
+    // Dynamic import to avoid Edge Runtime issues and handle missing deps gracefully
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdf2pic = require('pdf2pic');
+    const { fromBuffer } = pdf2pic;
+
+    // Write buffer to a temp path pdf2pic can work with
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    const tmpPath = path.join(os.tmpdir(), `proquoment-pdf-${Date.now()}.pdf`);
+
+    try {
+      fs.writeFileSync(tmpPath, buffer);
+
+      const converter = fromBuffer(buffer, {
+        density: 200,         // DPI — 200 is good balance of quality vs size
+        format: 'png',
+        width: 1200,
+        height: 1600,
+        preserveAspectRatio: true,
+        saveFilename: 'page',
+        savePath: os.tmpdir(),
+      });
+
+      const results: PdfPageImage[] = [];
+
+      for (let page = 1; page <= maxPages; page++) {
+        try {
+          const result = await converter(page, { responseType: 'buffer' });
+          if (result?.buffer) {
+            results.push({ buffer: result.buffer, page, mimeType: 'image/png' });
+          } else {
+            // No more pages
+            break;
+          }
+        } catch {
+          // Page doesn't exist or conversion failed — stop
+          break;
+        }
+      }
+
+      return results;
+    } finally {
+      // Clean up temp file
+      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    }
+  } catch (err) {
+    console.warn(
+      '[pdfExtractor] pdf2pic unavailable or failed — scanned PDF pages cannot be converted to images.',
+      err instanceof Error ? err.message : String(err)
+    );
+    return [];
+  }
 }
