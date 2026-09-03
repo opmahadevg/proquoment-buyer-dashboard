@@ -148,12 +148,80 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return data;
   };
 
+  const signInWithGoogleIdToken = async (idToken: string, nonce?: string) => {
+    const { data, error } = await getSupabase().auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken,
+      nonce: nonce || undefined,
+    });
+    if (error) throw error;
+
+    if (data?.user) {
+      const meta = data.user.user_metadata || {};
+      const supabase = getSupabase();
+      try {
+        await supabase
+          .from('buyer_profiles')
+          .upsert(
+            {
+              id: data.user.id,
+              email: data.user.email,
+              verification_status: 'pending',
+              organization_name: meta.company || meta.organization_name || '',
+              login_email: data.user.email,
+            },
+            { onConflict: 'id', ignoreDuplicates: true }
+          );
+      } catch (e: any) {
+        console.warn('buyer_profiles bootstrap skipped (non-fatal):', e?.message);
+      }
+
+      try {
+        await supabase
+          .from('user_profiles')
+          .upsert(
+            {
+              id: data.user.id,
+              email: data.user.email,
+              full_name: meta.full_name || meta.name || data.user.email?.split('@')[0] || 'Buyer',
+              avatar_url: meta.avatar_url || meta.picture || '',
+              role: 'buyer',
+            },
+            { onConflict: 'id', ignoreDuplicates: true }
+          );
+      } catch {
+        // Non-fatal
+      }
+    }
+
+    return data;
+  };
+
+  const signInWithGoogleOAuth = async (redirectTo?: string) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const callbackUrl = redirectTo || `${origin}/auth/callback`;
+    const { data, error } = await getSupabase().auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: callbackUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const value = {
     user,
     session,
     loading,
     signUp,
     signIn,
+    signInWithGoogleIdToken,
+    signInWithGoogleOAuth,
     signOut,
     getCurrentUser,
     getUserProfile,

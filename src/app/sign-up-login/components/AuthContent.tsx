@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -7,6 +7,8 @@ import { Toaster } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import GoogleOneTap from '@/components/auth/GoogleOneTap';
+import GoogleSignInButton from '@/components/auth/GoogleSignInButton';
 
 type AuthMode = 'login' | 'signup' | 'forgot';
 
@@ -40,6 +42,12 @@ export default function AuthContent() {
   const forgotForm = useForm<ForgotForm>();
 
   const next = searchParams.get('next') || '/';
+
+  useEffect(() => {
+    if (searchParams.get('error')) {
+      setAuthError('Authentication failed. Please try again or use another sign-in method.');
+    }
+  }, [searchParams]);
 
   const handleLogin = async (data: LoginForm) => {
     setAuthError(null);
@@ -142,6 +150,7 @@ export default function AuthContent() {
   return (
     <div className="min-h-screen flex">
       <Toaster position="bottom-right" richColors />
+      <GoogleOneTap next={next} onError={(err) => setAuthError(err.message)} />
 
       {/* Left brand panel */}
       <div
@@ -274,6 +283,25 @@ export default function AuthContent() {
                   {authError}
                 </div>
               )}
+
+              {/* Google Sign In Button */}
+              <div className="mb-5">
+                <GoogleSignInButton
+                  text="Sign in with Google"
+                  next={next}
+                  disabled={isLoading}
+                  onLoadingChange={setIsLoading}
+                />
+              </div>
+
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px bg-[var(--border)]" />
+                <span className="text-xs text-[var(--muted-foreground)] font-medium">
+                  or continue with email
+                </span>
+                <div className="flex-1 h-px bg-[var(--border)]" />
+              </div>
+
               <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-[var(--foreground)] mb-1.5">
@@ -414,6 +442,25 @@ export default function AuthContent() {
                   {authError}
                 </div>
               )}
+
+              {/* Google Sign Up Button */}
+              <div className="mb-5">
+                <GoogleSignInButton
+                  text="Sign up with Google"
+                  next={next}
+                  disabled={isLoading}
+                  onLoadingChange={setIsLoading}
+                />
+              </div>
+
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px bg-[var(--border)]" />
+                <span className="text-xs text-[var(--muted-foreground)] font-medium">
+                  or register with email
+                </span>
+                <div className="flex-1 h-px bg-[var(--border)]" />
+              </div>
+
               <form onSubmit={signupForm.handleSubmit(handleSignup)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-[var(--foreground)] mb-1.5">
