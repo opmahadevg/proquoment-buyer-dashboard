@@ -83,6 +83,15 @@ export interface ChatMessage {
 }
 
 // ─── Visual Intent ───────────────────────────────────────────────────
+export type VisualGateStatus =
+  | 'idle'
+  | 'ready_to_prompt'
+  | 'generating'
+  | 'ready_for_review'
+  | 'revising'
+  | 'buyer_confirmed'
+  | 'bypassed';
+
 export interface VisualObservation {
   image_id: string;
   image_url: string;
@@ -90,6 +99,18 @@ export interface VisualObservation {
   inferences: string[];             // AI-derived: "appears to be engineered mesh"
   buyer_notes: string[];            // Buyer-written notes on this image
   rejected_attributes: string[];    // "do not use this logo"
+}
+
+export interface VisualIteration {
+  iteration: number;
+  version: number;
+  image_url: string;
+  prompt_used?: string;
+  specs_summary?: string;
+  status: 'pending' | 'confirmed' | 'rejected' | 'superseded' | 'bypassed';
+  buyer_action?: 'approved' | 'modified' | 'bypassed';
+  buyer_comment?: string;
+  timestamp: string;
 }
 
 // ─── Conflicts ───────────────────────────────────────────────────────
@@ -188,6 +209,12 @@ export interface RFQState {
     accepted_attributes: string[];
     rejected_attributes: string[];
     compact_summary?: string;
+    gate_status?: VisualGateStatus;
+    confirmed_visual_url?: string;
+    fingerprint_hash?: string;
+    version?: number;
+    generation_count?: number;
+    iterations?: VisualIteration[];
   };
   manufacturing: Record<string, ProvenancedField>;
   quality: Record<string, ProvenancedField>;

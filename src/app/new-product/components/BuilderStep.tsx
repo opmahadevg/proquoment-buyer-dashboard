@@ -9,11 +9,15 @@ import { submitRFQ, saveDraftRFQ, fetchDraftRFQ, deleteDraftRFQ } from '@/lib/se
 import { CheckCircle, Loader2, Save, EyeOff, Eye, Paperclip, ArrowUp, X } from 'lucide-react';
 import { MessageBubble, TypingIndicator } from './ChatMessage';
 import { RFQPanel } from './RFQPanel';
-import { RFQState, ChatImage } from '@/lib/rfq/types';
+import { RFQState, ChatImage, VisualIteration } from '@/lib/rfq/types';
 import { createEmptyRFQState, applyFieldPatch } from '@/lib/rfq/state-manager';
 import { deriveProductName, type Message } from './NewProductFlow';
 import { fromLegacyRFQData } from '@/lib/rfq/legacy-adapter';
 import { fileToChatImage, validateImageFile, MAX_IMAGES_PER_MESSAGE } from '@/lib/utils/image-validator';
+import { checkVisualReadiness, buildVisualPrompt, extractVisualFingerprint, hashVisualFingerprint } from '@/lib/rfq/visual-prompt-builder';
+import { type VisualCardData } from './VisualValidationCard';
+
+const MAX_VISUAL_GENERATIONS = 4;
 
 export default function BuilderStep({
   productText,
@@ -83,6 +87,7 @@ export default function BuilderStep({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingFeedbackIterationRef = useRef<number | null>(null);
 
   // Attached reference images state
   const [attachedImages, setAttachedImages] = useState<ChatImage[]>([]);
@@ -133,6 +138,307 @@ export default function BuilderStep({
 
   // New RFQ Intelligence engine hook
   const { isLoading: isProcessing, error: chatError, sendMessage: sendRFQMessage } = useRFQChat();
+
+  // ─── Visual Validation Layer ────────────────────────────────────────────────
+  const triggerVisualization = useCallback(async (currentState: RFQState, cardIdToUpdate?: string) => {
+    const currentCount = currentState.visual_intent?.generation_count || 0;
+    if (currentCount >= MAX_VISUAL_GENERATIONS) {
+      toast.error(`Maximum ${MAX_VISUAL_GENERATIONS} visual previews reached for this RFQ.`);
+      const limitMsg: Message = {
+        id: `ai-limit-${Date.now()}`,
+        role: 'ai',
+        text: `You have reached the maximum limit of ${MAX_VISUAL_GENERATIONS} visual previews for this RFQ session. Sourcing will proceed using your captured written specifications.`,
+        options: ['Confirm target price & MOQ', 'Add packaging requirements', 'Review supplier matches'],
+      };
+      setMessages((prev) => [...prev, limitMsg]);
+      return;
+    }
+
+    const nextCount = currentCount + 1;
+    const cardId = cardIdToUpdate || `vis-${Date.now()}`;
+    const { prompt, negativePrompt, fingerprint, fingerprintHash } = buildVisualPrompt(currentState);
+
+    const specsList = [
+      { label: 'Product', value: currentState.product.name?.value || 'Product' },
+      { label: 'Application', value: currentState.product.intended_use?.value || currentState.product.classification?.broad_category || 'Commercial' },
+      { label: 'Material', value: fingerprint.material || 'Standard' },
+      { label: 'Color', value: fingerprint.color || 'Standard' },
+      { label: 'Branding', value: fingerprint.branding || 'None' },
+      { label: 'Quantity', value: currentState.quantity?.required_quantity?.value || '500 units' },
+      { label: 'Target Price', value: currentState.commercial?.target_price?.value || '~$8/unit' },
+    ];
+
+    const initialCard: VisualCardData = {
+      id: cardId,
+      version: (currentState.visual_intent?.version || 0) + 1,
+      status: 'generating',
+      specs: specsList,
+      promptUsed: prompt,
+      generationCount: nextCount,
+      maxGenerations: MAX_VISUAL_GENERATIONS,
+    };
+
+    setMessages((prev) => {
+      if (cardIdToUpdate) {
+        return prev.map((m) => (m.visualCard?.id === cardIdToUpdate ? { ...m, visualCard: initialCard } : m));
+      }
+      const lastMsg = prev[prev.length - 1];
+      if (lastMsg && lastMsg.role === 'ai') {
+        return [...prev.slice(0, -1), { ...lastMsg, visualCard: initialCard }];
+      }
+      return [
+        ...prev,
+        {
+          id: `ai-vis-${Date.now()}`,
+          role: 'ai',
+          text: "Thanks, I've captured the key details. Here's what I understood:",
+          visualCard: initialCard,
+        },
+      ];
+    });
+
+    try {
+      const res = await fetch('/api/ai/visualize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          negativePrompt,
+          productName: currentState.product.name?.value,
+          version: initialCard.version,
+          generationCount: nextCount,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.imageUrl) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.visualCard?.id === cardId
+              ? {
+                  ...m,
+                  visualCard: {
+                    ...m.visualCard,
+                    status: 'ready',
+                    imageUrl: data.imageUrl,
+                    modelUsed: data.modelUsed,
+                    generationCount: nextCount,
+                    maxGenerations: MAX_VISUAL_GENERATIONS,
+                  },
+                }
+              : m
+          )
+        );
+        const newIteration: VisualIteration = {
+          iteration: nextCount,
+          version: initialCard.version,
+          image_url: data.imageUrl,
+          prompt_used: prompt,
+          specs_summary: [
+            currentState.product.name?.value,
+            currentState.specifications?.material?.value,
+            currentState.specifications?.color?.value,
+          ].filter(Boolean).join(' · '),
+          status: 'pending',
+          timestamp: new Date().toISOString(),
+        };
+
+        setRfqState((prev) => {
+          const prevIterations = prev.visual_intent?.iterations || [];
+          return {
+            ...prev,
+            visual_intent: {
+              ...prev.visual_intent,
+              gate_status: 'ready_for_review',
+              confirmed_visual_url: data.imageUrl,
+              fingerprint_hash: fingerprintHash,
+              version: initialCard.version,
+              generation_count: nextCount,
+              iterations: [...prevIterations.filter((it) => it.iteration !== nextCount), newIteration],
+            },
+          };
+        });
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.visualCard?.id === cardId
+              ? {
+                  ...m,
+                  visualCard: {
+                    ...m.visualCard,
+                    status: 'failed',
+                    errorMessage: data.error || 'Failed to render image',
+                    generationCount: nextCount,
+                    maxGenerations: MAX_VISUAL_GENERATIONS,
+                  },
+                }
+              : m
+          )
+        );
+      }
+    } catch (err: any) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.visualCard?.id === cardId
+            ? {
+                ...m,
+                visualCard: {
+                  ...m.visualCard,
+                  status: 'failed',
+                  errorMessage: err.message || 'Network error',
+                  generationCount: nextCount,
+                  maxGenerations: MAX_VISUAL_GENERATIONS,
+                },
+              }
+            : m
+        )
+      );
+    }
+  }, []);
+
+  const handleConfirmVisual = useCallback((cardId?: string) => {
+    let confirmedUrl = rfqRef.current.visual_intent?.confirmed_visual_url || '';
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (!cardId || m.visualCard?.id === cardId || m.visualCard?.imageUrl) {
+          if (m.visualCard?.imageUrl) {
+            confirmedUrl = m.visualCard.imageUrl;
+          }
+          return {
+            ...m,
+            visualCard: m.visualCard
+              ? {
+                  ...m.visualCard,
+                  status: 'confirmed',
+                }
+              : undefined,
+          };
+        }
+        return m;
+      })
+    );
+
+    setRfqState((prev) => {
+      const urlToConfirm = confirmedUrl || prev.visual_intent?.confirmed_visual_url || '';
+      const updatedSpecs = { ...prev.specifications };
+      for (const k of Object.keys(updatedSpecs)) {
+        if (updatedSpecs[k]?.value && updatedSpecs[k].value !== '(Pending)') {
+          updatedSpecs[k] = {
+            ...updatedSpecs[k],
+            status: 'confirmed',
+            confidence: 'confirmed',
+            buyer_confirmed: true,
+            source_type: 'visual_confirmed',
+          };
+        }
+      }
+
+      const updatedIterations = (prev.visual_intent?.iterations || []).map((it, idx, arr) => {
+        if (it.image_url === urlToConfirm || idx === arr.length - 1) {
+          return {
+            ...it,
+            status: 'confirmed' as const,
+            buyer_action: 'approved' as const,
+            buyer_comment: it.buyer_comment || 'Approved by buyer: Looks right as is',
+          };
+        }
+        return it;
+      });
+
+      return {
+        ...prev,
+        specifications: updatedSpecs,
+        visual_intent: {
+          ...prev.visual_intent,
+          gate_status: 'buyer_confirmed',
+          confirmed_visual_url: urlToConfirm,
+          iterations: updatedIterations,
+        },
+      };
+    });
+
+    toast.success('Requirement visual confirmed!');
+    
+    // Auto add AI confirmation message
+    const confirmMsg: Message = {
+      id: `ai-confirm-${Date.now()}`,
+      role: 'ai',
+      text: "Perfect. I’ve confirmed the requirement and will use this specification for sourcing.\n\nNow, let's verify your commercial and logistics terms.",
+      options: ['Confirm target price & MOQ', 'Add packaging requirements', 'Review supplier matches'],
+    };
+    setMessages((prev) => [...prev, confirmMsg]);
+  }, []);
+
+  const handleChangeVisual = useCallback((cardId: string) => {
+    const currentCount = rfqRef.current.visual_intent?.generation_count || 1;
+    pendingFeedbackIterationRef.current = currentCount;
+
+    setRfqState((prev) => {
+      const updatedIterations = (prev.visual_intent?.iterations || []).map((it, idx, arr) => {
+        if (it.iteration === currentCount || idx === arr.length - 1) {
+          return {
+            ...it,
+            status: 'superseded' as const,
+            buyer_action: 'modified' as const,
+          };
+        }
+        return it;
+      });
+      return {
+        ...prev,
+        visual_intent: {
+          ...prev.visual_intent,
+          gate_status: 'revising',
+          iterations: updatedIterations,
+        },
+      };
+    });
+
+    const promptReply: Message = {
+      id: `ai-change-${Date.now()}`,
+      role: 'ai',
+      text: "Sure. What would you like to change? (e.g. 'Make the shirt dark blue' or 'Change collar to Mandarin')",
+      options: ['Change color', 'Change material', 'Change branding placement', 'Change silhouette / cut'],
+    };
+    setMessages((prev) => [...prev, promptReply]);
+    inputRef.current?.focus();
+  }, []);
+
+  const handleProceedWithoutImage = useCallback((cardId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.visualCard?.id === cardId ? { ...m, visualCard: { ...m.visualCard, status: 'bypassed' } } : m))
+    );
+
+    setRfqState((prev) => {
+      const updatedIterations = (prev.visual_intent?.iterations || []).map((it, idx, arr) => {
+        if (idx === arr.length - 1 && it.status === 'pending') {
+          return {
+            ...it,
+            status: 'bypassed' as const,
+            buyer_action: 'bypassed' as const,
+            buyer_comment: 'Buyer chose to proceed without visual confirmation',
+          };
+        }
+        return it;
+      });
+      return {
+        ...prev,
+        visual_intent: {
+          ...prev.visual_intent,
+          gate_status: 'bypassed',
+          iterations: updatedIterations,
+        },
+      };
+    });
+
+    const bypassMsg: Message = {
+      id: `ai-bypass-${Date.now()}`,
+      role: 'ai',
+      text: "Understood. I’ll proceed using the specification we captured without visual confirmation.",
+      options: ['Confirm commercial terms', 'Finalize RFQ'],
+    };
+    setMessages((prev) => [...prev, bypassMsg]);
+  }, []);
 
   // Auto-scroll
   useEffect(() => {
@@ -199,19 +505,14 @@ export default function BuilderStep({
     
     if (result) {
       // 1. Optimistic Update of RFQ State
-      setRfqState(prev => {
-        let next = prev;
-        if (result.rfq_updates && result.rfq_updates.length > 0) {
-          next = applyFieldPatch(next, result.rfq_updates as any).newState;
-        }
-        
-        // Ensure name is synced to title
-        if (next.product.name?.value && next.product.name.value !== rfqTitle) {
-          setRfqTitle(next.product.name.value);
-        }
-        
-        return next;
-      });
+      let updatedRfqState = currentRfq;
+      if (result.rfq_updates && result.rfq_updates.length > 0) {
+        updatedRfqState = applyFieldPatch(currentRfq, result.rfq_updates as any).newState;
+      }
+      if (updatedRfqState.product.name?.value && updatedRfqState.product.name.value !== rfqTitle) {
+        setRfqTitle(updatedRfqState.product.name.value);
+      }
+      setRfqState(updatedRfqState);
       
       // 2. Add AI response bubble
       let replyText = result.buyer_message || '';
@@ -223,6 +524,88 @@ export default function BuilderStep({
         !lowerReply.includes('assumption register')
       ) {
         replyText += "\n\nNote: If needed, you can review and fulfill any remaining items in the Assumption Register (Missing / TBD / Supplier-proposed items) in the side panel as required before finalizing.";
+      }
+
+      // Check visual readiness and delta
+      const readiness = checkVisualReadiness(updatedRfqState);
+      const gateStatus = updatedRfqState.visual_intent?.gate_status || 'idle';
+      const oldHash = updatedRfqState.visual_intent?.fingerprint_hash;
+      const newFp = extractVisualFingerprint(updatedRfqState);
+      const newHash = hashVisualFingerprint(newFp);
+      const visualDelta = Boolean(oldHash && oldHash !== newHash);
+      const genCount = updatedRfqState.visual_intent?.generation_count || 0;
+      const hasReachedLimit = genCount >= MAX_VISUAL_GENERATIONS;
+
+      // CHANGE 2: Standalone re-ask question after making changes
+      if (gateStatus === 'revising' || (gateStatus === 'buyer_confirmed' && visualDelta)) {
+        const prodName = updatedRfqState.product.name?.value || 'your product';
+        const specSummary = [newFp.material, newFp.color, newFp.silhouette, newFp.branding].filter(Boolean).join(', ');
+
+        if (hasReachedLimit) {
+          replyText = `Understood — I've updated the specifications for **${prodName}**${specSummary ? ` (${specSummary})` : ''}.\n\n*(Maximum ${MAX_VISUAL_GENERATIONS} visual previews reached for this RFQ session. Proceeding with captured written specifications.)*`;
+          result.ai_options = [
+            { label: 'Looks right as is', value: 'Looks right as is' },
+            { label: 'Proceed to commercial terms', value: 'Proceed to commercial terms' },
+          ];
+        } else {
+          replyText = `Understood — I've updated the specifications for **${prodName}**${specSummary ? ` (${specSummary})` : ''}.\n\nWould you like me to generate an updated visual preview to verify the new appearance?`;
+
+          result.ai_options = [
+            { label: '✦ Generate Updated Visual', value: '✦ Generate Updated Visual' },
+            { label: 'Looks right as is', value: 'Looks right as is' },
+            { label: 'Proceed without visual', value: 'Proceed without visual' },
+          ];
+        }
+        result.multi_select = false;
+
+        updatedRfqState = {
+          ...updatedRfqState,
+          visual_intent: {
+            ...updatedRfqState.visual_intent,
+            gate_status: hasReachedLimit ? 'buyer_confirmed' : 'ready_to_prompt',
+            fingerprint_hash: newHash,
+          },
+        };
+        setRfqState(updatedRfqState);
+      }
+      // CHANGE 1: Standalone question when visual readiness is first reached (never mixed with other spec questions)
+      else if (readiness.isReady && gateStatus === 'idle') {
+        const prodName = updatedRfqState.product.name?.value || 'your product';
+        const specSummary = [newFp.material, newFp.color, newFp.silhouette, newFp.branding].filter(Boolean).join(', ');
+
+        if (!hasReachedLimit) {
+          replyText = `Great — I have captured the key specifications for **${prodName}**${specSummary ? ` (${specSummary})` : ''}.\n\nBefore we move to commercial terms, would you like me to generate an illustrative visual concept so you can verify what I understood?`;
+
+          result.ai_options = [
+            { label: '✦ Generate Visual Preview', value: '✦ Generate Visual Preview' },
+            { label: 'Proceed without visual', value: 'Proceed without visual' },
+          ];
+          result.multi_select = false;
+
+          updatedRfqState = {
+            ...updatedRfqState,
+            visual_intent: {
+              ...updatedRfqState.visual_intent,
+              gate_status: 'ready_to_prompt',
+              fingerprint_hash: newHash,
+            },
+          };
+          setRfqState(updatedRfqState);
+        }
+      }
+      // Ongoing turns: if visual is ready and unconfirmed, ensure visual preview option chip remains accessible
+      else if (readiness.isReady && !hasReachedLimit && gateStatus !== 'buyer_confirmed') {
+        if (!result.ai_options) result.ai_options = [];
+        const alreadyHasVisualOpt = result.ai_options.some((opt: any) => {
+          const val = typeof opt === 'string' ? opt : (opt.label || opt.value || '');
+          return val.includes('Visual') || val.includes('Preview');
+        });
+        if (!alreadyHasVisualOpt) {
+          result.ai_options.push({
+            label: '✦ Generate Visual Preview',
+            value: '✦ Generate Visual Preview',
+          });
+        }
       }
 
       const finalMsg: Message = {
@@ -299,8 +682,27 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
     const aiMsgId = `ai-${Date.now()}`;
     setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', text: '', isStreaming: true }]);
 
+    let initialRfq = rfqRef.current;
+    if (selectedImages && selectedImages.length > 0) {
+      initialRfq = {
+        ...initialRfq,
+        visual_intent: {
+          ...initialRfq.visual_intent,
+          references: selectedImages.map((img: any, i: number) => ({
+            image_id: `ref-${i + 1}`,
+            image_url: img.thumbnail || img.original,
+            observations: [],
+            inferences: [],
+            buyer_notes: img.note?.trim() ? [img.note.trim()] : [],
+            rejected_attributes: [],
+          })),
+        },
+      };
+      setRfqState(initialRfq);
+    }
+
     // Execute the AI turn asynchronously without streaming
-    executeTurn(initialHistory, rfqRef.current, aiMsgId);
+    executeTurn(initialHistory, initialRfq, aiMsgId);
     
   }, [initialized, productText, selectedImages]);
 
@@ -310,6 +712,25 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
 
   const handleSend = (text: string) => {
     const trimmed = text.trim();
+    if (
+      trimmed.includes('Generate Visual') ||
+      trimmed.includes('✦ Generate Visual Preview') ||
+      trimmed.includes('✦ Generate Updated Visual')
+    ) {
+      triggerVisualization(rfqRef.current);
+      return;
+    }
+    if (
+      trimmed === 'Proceed without visual' ||
+      /^(skip|no visual|no image|proceed without|without visual|no thanks)/i.test(trimmed)
+    ) {
+      handleProceedWithoutImage('');
+      return;
+    }
+    if (trimmed === 'Looks right as is' || trimmed === 'Looks right' || trimmed === 'Looks good') {
+      handleConfirmVisual('');
+      return;
+    }
     if ((!trimmed && attachedImages.length === 0) || isProcessing) return;
 
     const messageImages = attachedImages.length > 0 ? [...attachedImages] : undefined;
@@ -334,6 +755,30 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
       },
     ];
     setConversationHistory(newHistory);
+
+    // If buyer requested a change on a visual iteration, capture their reply as buyer_comment
+    if (pendingFeedbackIterationRef.current !== null) {
+      const targetIteration = pendingFeedbackIterationRef.current;
+      pendingFeedbackIterationRef.current = null;
+      setRfqState((prev) => {
+        const updatedIterations = (prev.visual_intent?.iterations || []).map((it) => {
+          if (it.iteration === targetIteration) {
+            return {
+              ...it,
+              buyer_comment: trimmed || userText,
+            };
+          }
+          return it;
+        });
+        return {
+          ...prev,
+          visual_intent: {
+            ...prev.visual_intent,
+            iterations: updatedIterations,
+          },
+        };
+      });
+    }
 
     const aiMsgId = `ai-${Date.now()}`;
     setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', text: '', isStreaming: true }]);
@@ -371,6 +816,12 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
     const finalCategory = rfqState.synthesized?.product.category_path?.join(' > ') || rfqState.product.classification?.broad_category || 'TBD';
     const finalDescription = rfqState.synthesized?.product.synthesized_description || rfqState.product.description?.value || 'TBD';
 
+    const confirmedVisual =
+      rfqState.visual_intent?.confirmed_visual_url ||
+      messages.find((m) => m.visualCard?.imageUrl && m.visualCard?.status === 'confirmed')?.visualCard?.imageUrl ||
+      messages.find((m) => m.visualCard?.imageUrl)?.visualCard?.imageUrl ||
+      '';
+
     await saveProduct({
       id: `prod-rfq-${Date.now()}`,
       name: title,
@@ -382,9 +833,28 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
       status: 'New Update',
       stage: 'Quoting',
       updated: dateStr,
-      image: '',
+      image: confirmedVisual,
       imageAlt: `${title} product`,
     });
+
+    const updatedStateWithVisual = {
+      ...rfqState,
+      visual_intent: {
+        ...rfqState.visual_intent,
+        confirmed_visual_url: confirmedVisual || rfqState.visual_intent?.confirmed_visual_url,
+      },
+    };
+
+    // Rich chat transcript preserving visualCard metadata
+    const richChatHistory = messages
+      .filter((m) => !m.isStreaming)
+      .map((m) => ({
+        id: m.id,
+        role: m.role === 'ai' ? 'assistant' : 'user',
+        content: m.text,
+        images: m.images,
+        visualCard: m.visualCard,
+      }));
 
     try {
       const buyerName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Enterprise Buyer';
@@ -395,10 +865,11 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
         specs: specsStr,
         buyer: buyerName,
         description: finalDescription,
-        aiChat: conversationHistory,
+        aiChat: richChatHistory.length > 0 ? richChatHistory : conversationHistory,
         // C5 FIX: persist structured state and target price
-        rfqState: rfqState,
+        rfqState: updatedStateWithVisual,
         targetPrice: rfqState.commercial?.target_price?.value || undefined,
+        imageUrl: confirmedVisual,
       });
       
       if (tempRfqId && realId) {
@@ -498,6 +969,9 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
                   onOptionClick={handleSend}
                   onCorrect={msg.role === 'user' ? handleCorrect : undefined}
                   isLoading={isProcessing}
+                  onConfirmVisual={handleConfirmVisual}
+                  onChangeVisual={handleChangeVisual}
+                  onProceedWithoutImage={handleProceedWithoutImage}
                 />
               ))}
               <div ref={messagesEndRef} />
@@ -609,6 +1083,7 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
               isLoading={isProcessing}
               onFinalize={handleFinalize}
               onResolveConflict={handleResolveConflict}
+              onGenerateVisual={() => triggerVisualization(rfqRef.current)}
             />
           </div>
         )}

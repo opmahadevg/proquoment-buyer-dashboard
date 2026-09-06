@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { product, qty, value, targetPrice, specs, deadline, buyer, description, aiChat, rfqState, userId: clientUserId } = body;
+  const { product, qty, value, targetPrice, specs, deadline, buyer, description, aiChat, rfqState, imageUrl: clientImageUrl, image: clientImage, userId: clientUserId } = body;
+  const imageUrl = clientImageUrl || clientImage || rfqState?.visual_intent?.confirmed_visual_url || null;
 
   if (!product) {
     return NextResponse.json({ error: 'Product name is required' }, { status: 400 });
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     year: 'numeric',
   });
 
-  // 1. Persist to rfqs table (resilient against missing optional columns like rfq_state / target_price)
+  // 1. Persist to rfqs table
   const basePayload: Record<string, any> = {
     id,
     product,
@@ -85,12 +86,14 @@ export async function POST(req: NextRequest) {
     description: description || null,
     ai_chat: aiChat || null,
     buyer_id: userId,
+    image_url: imageUrl || null,
   };
 
   const fullPayload = {
     ...basePayload,
     ...(rfqState ? { rfq_state: rfqState } : {}),
     ...(targetPrice ? { target_price: targetPrice } : {}),
+    ...(imageUrl ? { image_url: imageUrl } : {}),
   };
 
   let { error: rfqErr } = await supabase.from('rfqs').insert(fullPayload);
@@ -108,7 +111,7 @@ export async function POST(req: NextRequest) {
     if (serviceRoleKey) {
       console.warn('[api/rfq/create] RLS policy blocked insert (42501), retrying using service role client...');
       const adminDb = createClient(SUPABASE_URL, serviceRoleKey);
-      const adminRetry = await adminDb.from('rfqs').insert(basePayload);
+      const adminRetry = await adminDb.from('rfqs').insert(fullPayload);
       rfqErr = adminRetry.error;
     }
   }
@@ -136,13 +139,30 @@ export async function POST(req: NextRequest) {
     moq: qty || 'TBD',
     buyer_id: userId,
     is_demo: isDemo,
+    image_url: imageUrl || null,
   });
 
   if (prodErr) {
     console.warn('[api/rfq/create] Products insert warning:', prodErr);
   }
 
-  // 3. Create Admin Notification
+  // 3. Persist confirmed AI visual into rfq_reference_images for unified gallery indexing
+  if (imageUrl) {
+    try {
+      await supabase.from('rfq_reference_images').insert({
+        rfq_id: id,
+        storage_path: `ai-visuals/${id}`,
+        public_url: imageUrl,
+        thumbnail_url: imageUrl,
+        title: '✦ AI Synthesized Visual Concept (Buyer Confirmed)',
+        sort_order: 0,
+      });
+    } catch (imgErr) {
+      console.warn('[api/rfq/create] Failed to insert AI visual into rfq_reference_images:', imgErr);
+    }
+  }
+
+  // 4. Create Admin Notification
   try {
     await supabase.from('notifications').insert({
       target_dashboard: 'admin',

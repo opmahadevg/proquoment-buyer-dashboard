@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { CheckCircle } from 'lucide-react';
 import { type Message } from './NewProductFlow';
+import { VisualValidationCard } from './VisualValidationCard';
 
 const THINKING_STATES = [
   'Understanding your requirements',
@@ -42,11 +43,17 @@ export function MessageBubble({
   onOptionClick,
   onCorrect,
   isLoading,
+  onConfirmVisual,
+  onChangeVisual,
+  onProceedWithoutImage,
 }: {
   msg: Message;
   onOptionClick: (opt: string) => void;
   onCorrect?: (text: string) => void;
   isLoading: boolean;
+  onConfirmVisual?: (cardId: string) => void;
+  onChangeVisual?: (cardId: string) => void;
+  onProceedWithoutImage?: (cardId: string) => void;
 }) {
   const [selectedSingle, setSelectedSingle] = useState<string | null>(null);
   const [selectedMulti, setSelectedMulti] = useState<Set<string>>(new Set());
@@ -146,6 +153,18 @@ export function MessageBubble({
         </div>
       )}
 
+      {/* Visual Validation Card if present */}
+      {msg.visualCard && (
+        <div className="mt-2 mb-2">
+          <VisualValidationCard
+            card={msg.visualCard}
+            onLooksRight={() => onConfirmVisual?.(msg.visualCard!.id)}
+            onChangeSomething={() => onChangeVisual?.(msg.visualCard!.id)}
+            onProceedWithoutImage={() => onProceedWithoutImage?.(msg.visualCard!.id)}
+            isProcessing={isLoading}
+          />
+        </div>
+      )}
 
       {/* Quick-reply chips — only on last non-streaming message */}
       {!msg.isStreaming && msg.options && msg.options.length > 0 && (

@@ -407,6 +407,7 @@ export async function submitRFQ(rfq: {
   description?: string;
   aiChat?: any;
   rfqState?: any;
+  imageUrl?: string;
 }) {
   const supabase = getSupabase();
 
@@ -420,6 +421,8 @@ export async function submitRFQ(rfq: {
     } catch {}
   }
 
+  const resolvedImageUrl = rfq.imageUrl || rfq.rfqState?.visual_intent?.confirmed_visual_url || null;
+
   // 1. Try server API route first (handles cookies, server auth session, RLS, and UUIDs)
   try {
     const res = await fetch('/api/rfq/create', {
@@ -427,6 +430,7 @@ export async function submitRFQ(rfq: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...rfq,
+        imageUrl: resolvedImageUrl,
         userId,
       }),
     });
@@ -447,6 +451,7 @@ export async function submitRFQ(rfq: {
           description: rfq.description || null,
           aiChat: rfq.aiChat || null,
           rfqState: rfq.rfqState || null,
+          imageUrl: resolvedImageUrl,
           createdAt: new Date().toISOString(),
         }, userId);
         return data.id;
@@ -501,6 +506,7 @@ export async function submitRFQ(rfq: {
     description: rfq.description || null,
     aiChat: rfq.aiChat || null,
     rfqState: rfq.rfqState || null,
+    imageUrl: resolvedImageUrl,
     createdAt: new Date().toISOString(),
   };
 
@@ -524,6 +530,7 @@ export async function submitRFQ(rfq: {
         description: rfq.description || null,
         ai_chat: rfq.aiChat || null,
         buyer_id: dbUserId,
+        image_url: resolvedImageUrl,
       };
 
       const fullPayload = {

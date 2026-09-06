@@ -38,6 +38,7 @@ import ImageSearchStep from './ImageSearchStep';
 import { MessageBubble, TypingIndicator } from './ChatMessage';
 import { RFQPanel } from './RFQPanel';
 import BuilderStep from './BuilderStep';
+import { type VisualCardData } from './VisualValidationCard';
 // ─── Types ───────────────────────────────────────────────────────────────────
 export type Step = 'intro' | 'transition' | 'choose' | 'upload' | 'extracting' | 'review' | 'image-search' | 'builder';
 export type RFQMethod = 'complete' | 'partial' | 'scratch';
@@ -50,6 +51,7 @@ export interface Message {
   multiSelect?: boolean; // Issue #8 — multi-select chip support
   isStreaming?: boolean;
   images?: { url: string; title?: string }[];
+  visualCard?: VisualCardData;
 }
 
 export interface RFQData {

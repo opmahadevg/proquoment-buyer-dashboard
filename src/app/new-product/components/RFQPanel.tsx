@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, ChevronRight } from 'lucide-react';
+import { CheckCircle, ChevronRight, Sparkles } from 'lucide-react';
 import { RFQState } from '@/lib/rfq/types';
 import { RFQField } from './rfq/RFQField';
 import { RFQSection } from './rfq/RFQSection';
@@ -11,7 +11,8 @@ export function RFQPanel({
   finalized,
   isLoading,
   onFinalize,
-  onResolveConflict
+  onResolveConflict,
+  onGenerateVisual,
 }: {
   rfqState: RFQState;
   rfqTitle: string;
@@ -19,6 +20,7 @@ export function RFQPanel({
   isLoading: boolean;
   onFinalize: () => void;
   onResolveConflict?: (id: string, resolution: string) => void;
+  onGenerateVisual?: () => void;
 }) {
   const { product, quantity, specifications, manufacturing, quality, compliance, commercial, logistics, packaging, special_requirements, conflicts, synthesized, assumption_register } = rfqState;
 
@@ -67,6 +69,46 @@ export function RFQPanel({
         {/* Basic info */}
         {hasBasicInfo ? (
           <RFQSection title="Product Overview" defaultOpen={true}>
+            {rfqState.visual_intent?.confirmed_visual_url ? (
+              <div className="mb-3.5 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg overflow-hidden border border-indigo-200/80 bg-white flex-shrink-0 shadow-sm">
+                  <img
+                    src={rfqState.visual_intent.confirmed_visual_url}
+                    alt="Confirmed Product Concept"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1 text-[#3B35E8] text-xs font-semibold">
+                    <CheckCircle size={13} className="text-[#3B35E8]" />
+                    <span>Visual Confirmed</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 truncate mt-0.5">
+                    Buyer approved interpretation
+                  </p>
+                </div>
+              </div>
+            ) : onGenerateVisual ? (
+              <div className="mb-3.5 p-2.5 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 border border-indigo-100/80 rounded-xl flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-md bg-white border border-indigo-100 flex items-center justify-center flex-shrink-0 shadow-xs">
+                    <Sparkles size={12} className="text-[#3B35E8]" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs text-gray-800 font-medium block truncate">AI Visual Concept</span>
+                    <span className="text-[10px] text-gray-500 block truncate">Inspect design interpretation</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onGenerateVisual}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-white bg-[#3B35E8] hover:bg-[#322dc7] active:scale-95 rounded-lg shadow-xs transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer"
+                >
+                  <Sparkles size={11} />
+                  <span>Preview</span>
+                </button>
+              </div>
+            ) : null}
             <RFQField label="Product Name" field={product.name} />
             <RFQField label="Category" field={
               product.classification ? {
