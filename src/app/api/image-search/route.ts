@@ -55,6 +55,8 @@ async function refineQuery(rawQuery: string): Promise<string> {
   if (!apiKey) return rawQuery;
 
   const candidateModels = [
+    'openai/gpt-5.6-luna',
+    'google/gemini-3.8-flash',
     'google/gemini-2.5-flash',
     'openai/gpt-4o-mini',
     'meta-llama/llama-3.3-70b-instruct',

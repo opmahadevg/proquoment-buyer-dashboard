@@ -36,14 +36,49 @@ const MIN_CHARS_PER_PAGE = 40;
  */
 export async function extractTextFromPdf(buffer: Buffer): Promise<PdfExtractionResult> {
   try {
-    const parse = await getPdfParse();
-    const data = await parse(buffer, {
-      // Limit pages rendered — avoids OOM on huge files
-      max: 20,
-    });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('pdf-parse');
 
-    const text = (data.text || '').trim();
-    const pageCount = data.numpages || 1;
+    let text = '';
+    let pageCount = 1;
+
+    if (mod && mod.PDFParse) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { pathToFileURL } = require('url');
+        const workerPath = require.resolve('pdfjs-dist/build/pdf.worker.mjs');
+        mod.PDFParse.setWorker(pathToFileURL(workerPath).href);
+        const parser = new mod.PDFParse({ data: buffer });
+        const result = await parser.getText();
+        text = (result?.text || '').trim();
+        pageCount = result?.total || result?.pages?.length || 1;
+        if (typeof parser.destroy === 'function') {
+          try { parser.destroy(); } catch { /* ignore */ }
+        }
+      } catch {
+        // Continue to secondary stream extraction
+      }
+    } else if (typeof mod === 'function' || (mod && typeof mod.default === 'function')) {
+      const fn = typeof mod === 'function' ? mod : mod.default;
+      const data = await fn(buffer, { max: 20 });
+      text = (data.text || '').trim();
+      pageCount = data.numpages || 1;
+    }
+
+    // Secondary fallback: extract literal text streams from raw buffer
+    if (!text) {
+      const raw = buffer.toString('latin1');
+      const tjMatches: string[] = [];
+      const tjRegex = /\(([^)]+)\)\s*Tj/g;
+      let match;
+      while ((match = tjRegex.exec(raw)) !== null) {
+        tjMatches.push(match[1]);
+      }
+      if (tjMatches.length > 0) {
+        text = tjMatches.join(' ').replace(/\\(\d{3})/g, '').trim();
+      }
+    }
+
     const avgCharsPerPage = text.length / Math.max(pageCount, 1);
     const hasTextLayer = text.length > 0;
     const needsOcr = avgCharsPerPage < MIN_CHARS_PER_PAGE;
@@ -51,7 +86,6 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<PdfExtractionR
     return { text, pageCount, hasTextLayer, needsOcr };
   } catch (err) {
     console.error('[pdfExtractor] pdf-parse failed:', err);
-    // Treat as scanned — caller should try OCR
     return { text: '', pageCount: 0, hasTextLayer: false, needsOcr: true };
   }
 }

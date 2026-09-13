@@ -46,3 +46,7 @@ turbo/
 # Sentry auth token (never commit)
 .env.sentry-build-plugin
 .sentryclirc
+
+# Scratch & Knowledge Graph
+scratch/
+graphify-out/

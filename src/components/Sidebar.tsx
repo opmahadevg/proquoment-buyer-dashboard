@@ -16,9 +16,11 @@ import {
   ShoppingCart,
   Ship,
   MessageSquare,
+  PlusCircle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDraftCount } from '@/lib/services/procurementApi';
+import GradientButton from '@/components/ui/gradient-button';
 
 interface SidebarProps {
   open: boolean;
@@ -98,29 +100,63 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 overflow-x-hidden">
-        {/* Overview */}
+        {/* Proquoment AI Button */}
+        <div className="py-1 flex justify-center">
+          {open ? (
+            <GradientButton
+              href="/intelligence"
+              width="100%"
+              height="40px"
+              className={`w-full shadow-xs hover:shadow-md transition-shadow ${
+                isActive('/intelligence') ? 'ring-2 ring-indigo-500/50' : ''
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2 text-sm font-bold tracking-tight">
+                <Sparkles size={16} className="text-indigo-600 dark:text-indigo-400 animate-pulse flex-shrink-0" />
+                <span className="truncate">Proquoment AI</span>
+              </div>
+            </GradientButton>
+          ) : (
+            <div className="relative group">
+              <GradientButton
+                href="/intelligence"
+                width="40px"
+                height="40px"
+                className={`w-10 h-10 rounded-full after:rounded-full ${
+                  isActive('/intelligence') ? 'ring-2 ring-indigo-500/50' : ''
+                }`}
+              >
+                <Sparkles size={17} className="text-indigo-600 dark:text-indigo-400 animate-pulse flex-shrink-0" />
+              </GradientButton>
+              <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150 shadow-md">
+                Proquoment AI
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Build RFQ */}
         <Link
-          href="/"
+          href="/new-product"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
-            isActive('/')
+            isActive('/new-product')
               ? 'bg-[var(--secondary)] text-primary'
               : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
           }`}
         >
-          <LayoutDashboard size={18} className="flex-shrink-0" />
+          <PlusCircle size={18} className="flex-shrink-0" />
           <span
             className="whitespace-nowrap overflow-hidden transition-all duration-200"
             style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
           >
-            Overview
+            Build RFQ
           </span>
           {!open && (
             <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
-              Overview
+              Build RFQ
             </div>
           )}
         </Link>
-
 
         {/* Products */}
         <Link
@@ -145,46 +181,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
           )}
         </Link>
 
-        {/* Organization */}
-        <Link
-          href="/organization"
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
-            isActive('/organization')
-              ? 'bg-[var(--secondary)] text-primary'
-              : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
-          }`}
-        >
-          <Building2 size={18} className="flex-shrink-0" />
-          <span
-            className="whitespace-nowrap overflow-hidden transition-all duration-200"
-            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
-          >
-            Organization
-          </span>
-          {!open && (
-            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
-              Organization
-            </div>
-          )}
-        </Link>
-
-        {/* ── Procurement Section ── */}
-        <div className="pt-3 mt-3 border-t border-[var(--border)]">
-          <div
-            className="overflow-hidden"
-            style={{
-              maxWidth: open ? '160px' : '0px',
-              opacity: open ? 1 : 0,
-              transition: 'max-width 0.28s, opacity 0.2s',
-            }}
-          >
-            <span className="px-3 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
-              Procurement
-            </span>
-          </div>
-        </div>
-
-        {/* RFQ */}
+        {/* My RFQs */}
         <Link
           href="/rfq"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/rfq') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}
@@ -227,7 +224,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
           )}
         </Link>
 
-        {/* Orders */}
+        {/* My Orders */}
         <Link
           href="/orders"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${isActive('/orders') ? 'bg-[var(--secondary)] text-primary' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'}`}
@@ -284,7 +281,33 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
           )}
         </Link>
 
-        {/* ── End Procurement Section ── */}
+        {/* Divider line */}
+        <div className="pt-2 my-2 border-t border-[var(--border)]" />
+
+        {/* Organization */}
+        <Link
+          href="/organization"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
+            isActive('/organization')
+              ? 'bg-[var(--secondary)] text-primary'
+              : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
+          }`}
+        >
+          <Building2 size={18} className="flex-shrink-0" />
+          <span
+            className="whitespace-nowrap overflow-hidden transition-all duration-200"
+            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
+          >
+            Organization
+          </span>
+          {!open && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
+              Organization
+            </div>
+          )}
+        </Link>
+
+        {/* Account */}
         <Link
           href="/account"
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
@@ -307,21 +330,28 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
           )}
         </Link>
 
-        {/* New Product CTA */}
-        <div className="pt-2">
-          <Link
-            href="/new-product"
-            className="flex items-center justify-center gap-2 w-full px-3 py-2.5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-[#2e29c4] active:scale-95 transition-all duration-150 overflow-hidden"
+        {/* Dashboard */}
+        <Link
+          href="/dashboard"
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group relative ${
+            isActive('/dashboard')
+              ? 'bg-[var(--secondary)] text-primary'
+              : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
+          }`}
+        >
+          <LayoutDashboard size={18} className="flex-shrink-0" />
+          <span
+            className="whitespace-nowrap overflow-hidden transition-all duration-200"
+            style={{ maxWidth: open ? '160px' : '0px', opacity: open ? 1 : 0 }}
           >
-            <Sparkles size={15} className="flex-shrink-0" />
-            <span
-              className="whitespace-nowrap overflow-hidden transition-all duration-200"
-              style={{ maxWidth: open ? '120px' : '0px', opacity: open ? 1 : 0 }}
-            >
-              New Product
-            </span>
-          </Link>
-        </div>
+            Dashboard
+          </span>
+          {!open && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--foreground)] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-150">
+              Dashboard
+            </div>
+          )}
+        </Link>
       </nav>
 
       {/* Bottom: Toggle + User + Sign Out */}

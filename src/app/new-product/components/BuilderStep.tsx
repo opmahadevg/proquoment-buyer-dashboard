@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRFQChat } from '@/lib/hooks/useRFQChat';
 import { saveProduct } from '@/lib/productStore';
 import { submitRFQ, saveDraftRFQ, fetchDraftRFQ, deleteDraftRFQ } from '@/lib/services/procurementApi';
 import { CheckCircle, Loader2, Save, EyeOff, Eye, Paperclip, ArrowUp, X } from 'lucide-react';
+import { IntelligenceRFQBanner } from '@/components/intelligence/IntelligenceRFQBanner';
 import { MessageBubble, TypingIndicator } from './ChatMessage';
 import { RFQPanel } from './RFQPanel';
 import { RFQState, ChatImage, VisualIteration } from '@/lib/rfq/types';
@@ -35,7 +36,12 @@ export default function BuilderStep({
   prefilledRfq?: any; // Leaving flexible for legacy compatibility
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
+  
+  const intelligenceWsId = searchParams?.get('intelligence_workspace_id');
+  const intelligenceOrigin = searchParams?.get('origin');
+  const intelligenceDest = searchParams?.get('destination');
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -962,6 +968,14 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
         <div className={`flex flex-col transition-all duration-300 ${panelOpen ? 'hidden md:flex md:w-[56%]' : 'w-full'} w-full`}>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-2xl mx-auto px-4 md:px-8 pt-5 md:pt-8 pb-4">
+              {intelligenceWsId && (
+                <IntelligenceRFQBanner
+                  workspaceId={intelligenceWsId}
+                  productName={productName || productText}
+                  origin={intelligenceOrigin || 'India'}
+                  destination={intelligenceDest || 'Indonesia'}
+                />
+              )}
               {messages.map((msg) => (
                 <MessageBubble
                   key={msg.id}

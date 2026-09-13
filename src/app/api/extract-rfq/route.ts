@@ -22,50 +22,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractTextFromPdf, validateFile, fileToBuffer, convertPdfPagesToImages } from '@/lib/services/pdfExtractor';
 import { extractWithVision, getMimeType, type ImageInput } from '@/lib/services/visionExtractor';
+import { extractRfqFromText } from '@/lib/services/textExtractor';
 import { isolateProductDesign } from '@/lib/services/productIsolator';
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB
 
 const FALLBACK_MODELS = [
-  'google/gemini-3.7-flash',
   'openai/gpt-5.6-luna',
+  'google/gemini-3.8-flash',
+  'google/gemini-3.7-flash',
 ];
-
-// ── System prompt for text-layer PDF extraction (no vision needed) ─────────────
-const TEXT_EXTRACTION_SYSTEM_PROMPT = `You are a B2B procurement data extraction specialist for Proquoment.
-
-You will receive raw text extracted from uploaded documents (PDFs, spreadsheets) that a buyer provided as their RFQ or product specification.
-
-Extract ALL available product and procurement information and return ONLY a valid JSON object. No explanations, no markdown fences -- just raw JSON.
-
-The JSON must have this exact structure:
-{
-  "product": {
-    "name": { "value": "extracted name", "source_type": "uploaded_document", "confidence": "high", "buyer_confirmed": true },
-    "classification": { "broad_category": "Apparel & Textiles", "confidence": "high" },
-    "intended_use": { "value": "usage", "source_type": "uploaded_document", "confidence": "high" },
-    "description": { "value": "professional brief", "source_type": "uploaded_document", "confidence": "high" }
-  },
-  "quantity": {
-    "value": { "value": "5000 pcs", "source_type": "uploaded_document", "confidence": "high" }
-  },
-  "specifications": {
-    "FieldName": { "value": "value with units", "source_type": "uploaded_document", "confidence": "high" }
-  },
-  "manufacturing": {},
-  "commercial": {},
-  "logistics": {},
-  "packaging": {}
-}
-
-Rules:
-- ONLY include fields where you found CLEAR information. Do not include empty or Pending fields.
-- Always include units: mm, cm, g, kg, g/m2, days, USD, %, etc.
-- Set source_type to uploaded_document for all fields.
-- Set confidence to high if clearly stated, medium if inferred.
-- Set buyer_confirmed to true for all extracted fields.
-- Return ONLY the JSON object. Nothing else.`;
 
 type ExtractionMethod = 'text' | 'vision' | 'mixed' | 'image-only';
 
@@ -77,58 +44,6 @@ interface ExtractionResult {
   designAttributes: string[];
   filesProcessed: number;
   pagesScanned: number;
-}
-
-// ── Text-layer LLM extraction (GPT-5.6-Luna) ──────────────────────────────────
-
-async function extractRfqFromText(text: string): Promise<any> {
-  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
-
-  let lastError = '';
-
-  for (const model of FALLBACK_MODELS) {
-    try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://proquoment.com',
-          'X-Title': 'Proquoment RFQ Extraction',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: TEXT_EXTRACTION_SYSTEM_PROMPT },
-            {
-              role: 'user',
-              content: `Extract the RFQ data from the following document text:\n\n${text.slice(0, 12000)}`,
-            },
-          ],
-          temperature: 0.1,
-          max_tokens: 3000,
-          response_format: { type: 'json_object' },
-        }),
-        signal: AbortSignal.timeout(45_000),
-      });
-
-      if (!res.ok) {
-        lastError = `${model} error ${res.status}: ${await res.text()}`;
-        console.warn('[extract-rfq] Text LLM', lastError, '-- trying fallback...');
-        continue;
-      }
-
-      const data = await res.json();
-      let jsonStr = (data.choices?.[0]?.message?.content || '').trim();
-      jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-      return JSON.parse(jsonStr);
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-      console.warn(`[extract-rfq] Text extraction model ${model} failed:`, lastError);
-    }
-  }
-
-  throw new Error(`Text extraction failed after all fallbacks: ${lastError}`);
 }
 
 // ── Route handler ──────────────────────────────────────────────────────────────

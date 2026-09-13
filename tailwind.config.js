@@ -41,6 +41,15 @@ module.exports = {
       },
       fontFamily: {
         sans: ['var(--font-plus-jakarta-sans)', 'sans-serif'],
+        mono: [
+          'var(--font-jetbrains-mono)',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Monaco',
+          'Consolas',
+          'monospace',
+        ],
       },
       keyframes: {
         fadeIn: {

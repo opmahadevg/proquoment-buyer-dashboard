@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Product+Design Isolator -- server-side only
  *
  * Given ANY text input (full RFQ, front-page text, extracted document text),
@@ -15,6 +15,7 @@ const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 
 const FALLBACK_MODELS = [
   'openai/gpt-5.6-luna',
+  'google/gemini-3.8-flash',
   'google/gemini-3.7-flash',
 ];
 

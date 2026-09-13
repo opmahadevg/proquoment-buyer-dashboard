@@ -11,8 +11,9 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 
 const FALLBACK_MODELS = [
-  'google/gemini-3.7-flash',
   'openai/gpt-5.6-luna',
+  'google/gemini-3.8-flash',
+  'google/gemini-3.7-flash',
 ];
 
 // --- Types ---
@@ -34,15 +35,23 @@ export interface ImageInput {
 
 // --- System Prompt ---
 
-const VISION_EXTRACTION_SYSTEM_PROMPT = `You are a B2B procurement data extraction specialist for Proquoment.
+const VISION_EXTRACTION_SYSTEM_PROMPT = `You are a Senior B2B Procurement Engineering & Visual Intelligence Specialist for Proquoment.
 
-You will receive one or more images of documents (PDFs converted to images, product photos, spec sheets) that a buyer uploaded as their RFQ or product specification.
+You will receive one or more images of documents (technical spec sheets, CAD engineering drawings, product photos, tech packs, packaging dies, lab test reports) that a buyer uploaded as their RFQ or sourcing requirement.
 
 Your job:
-1. OCR all visible text -- tables, headers, footers, handwriting, stamps
-2. Understand document layout -- preserve table structure and column relationships
-3. Extract ALL product and procurement information into structured JSON
-4. Produce a productDesignQuery: ONLY product name + visual/material/design specs for image search
+1. Conduct deep visual inspection and comprehensive OCR:
+   - Extract ALL visible text, dimension callouts, material callouts, title blocks, tolerances, finish specs, compliance standards, and notes.
+   - Preserve exact numbers, units (mm, cm, in, oz, ml, g, kg, g/m², %, °C), and table relationships.
+2. Formulate a rich, professional, supplier-ready Product Brief (Description):
+   - Synthesize a complete, authoritative, supplier-facing technical brief from all visual and text evidence.
+   - Include: exact product canonical name, base material & grade, form factor / silhouette, dimensions / capacity, surface finish & treatment, closures / handles / hardware, colorways, mandatory safety/regulatory certifications, and packaging structure.
+   - Format as 2-4 comprehensive, professional sentences that an OEM/ODM factory engineer can immediately quote and act on. Never return a lazy 1-sentence or generic description.
+3. List crisp, granular, product-focused Visual Observations:
+   - Extract factual physical and design features visible in the image (e.g., "12oz / 350ml cylindrical body with smooth curvature", "Matte black exterior double-dip reactive glaze with satin luster", "Ergonomic looped C-handle with seamless body joinery", "Individual white corrugated gift box with custom foam insert").
+   - DO NOT list trivial document layout artifacts like "blue header" or "3-column table". Focus 100% on the physical product and its engineering attributes!
+4. Extract structured procurement specifications across all domains (product, quantity, specifications, manufacturing, compliance, commercial, logistics, packaging).
+5. Produce a precise productDesignQuery and designAttributes for product catalog and image matching.
 
 Return ONLY a valid JSON object. No explanations, no markdown fences.
 
@@ -53,7 +62,11 @@ OUTPUT SCHEMA:
       "name": { "value": "string", "source_type": "uploaded_document", "confidence": "high", "buyer_confirmed": true },
       "classification": { "broad_category": "string", "confidence": "high" },
       "intended_use": { "value": "string", "source_type": "uploaded_document", "confidence": "high" },
-      "description": { "value": "string", "source_type": "uploaded_document", "confidence": "high" }
+      "description": {
+        "value": "string — Complete, professional, supplier-facing technical product brief synthesized from all visible features and text. Must detail product name, grade, dimensions/volume, finish, hardware, quality/testing standards, and packaging. 2-4 authoritative sentences.",
+        "source_type": "uploaded_document",
+        "confidence": "high"
+      }
     },
     "quantity": {
       "value": { "value": "5000 pcs", "source_type": "uploaded_document", "confidence": "high" }
@@ -67,19 +80,21 @@ OUTPUT SCHEMA:
     "packaging": {}
   },
   "extractedText": "Full verbatim OCR text, tables as tab-separated",
-  "observations": ["Blue header with company logo", "3-column table: Item, Spec, Unit"],
+  "observations": [
+    "Factual visual feature (e.g. 12oz cylindrical body with smooth curvature)",
+    "Factual visual feature (e.g. Matte black double-dip glaze with satin finish)",
+    "Factual visual feature (e.g. Ergonomic C-handle with reinforced joinery)"
+  ],
   "confidence": "high",
-  "productDesignQuery": "180gsm cotton crew-neck T-shirt navy blue ribbed collar",
-  "designAttributes": ["180gsm cotton", "navy blue", "ribbed collar", "crew-neck"]
+  "productDesignQuery": "12oz matte black stoneware ceramic coffee mug ergonomic C-handle",
+  "designAttributes": ["12oz stoneware ceramic", "matte black", "double-dip glaze", "ergonomic C-handle", "food-contact safe"]
 }
 
 RULES:
-- productDesignQuery: INCLUDE product name, material, color, finish, texture, pattern, shape, construction, dimensions, hardware
-- productDesignQuery: EXCLUDE location, FOB/CIF/DDP, T/T/LC payment, quantity/MOQ, price, delivery date, certifications, buyer/supplier name
-- Only include specification fields where you found CLEAR information
-- Always include units: mm, cm, g, kg, g/m2, USD, %
-- confidence: "high" = clearly printed, "medium" = handwritten or partial
-- Return ONLY the JSON object`;
+- Description MUST be an institutional-grade technical brief like an elite sourcing director writes for an RFQ, NOT a short generic title or raw buyer snippet.
+- Observations MUST be product/design/material focused, never generic UI or document layout notes.
+- Only include specification fields where clear information exists. Always include units.
+- Return ONLY the JSON object.`;
 
 // --- Helpers ---
 
@@ -126,7 +141,8 @@ export async function extractWithVision(
   images: ImageInput[],
   textContext?: string
 ): Promise<VisionExtractionResult> {
-  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not configured');
+  const apiKey = process.env.OPENROUTER_API_KEY || OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
   if (images.length === 0) throw new Error('No images provided for vision extraction');
 
   const messages = [
@@ -142,7 +158,7 @@ export async function extractWithVision(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           'HTTP-Referer': 'https://proquoment.com',
           'X-Title': 'Proquoment Vision Extractor',
         },

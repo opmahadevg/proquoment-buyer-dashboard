@@ -1,11 +1,5 @@
-import React from 'react';
-import AppLayout from '@/components/AppLayout';
-import OverviewDashboardContent from './components/OverviewDashboardContent';
+import { redirect } from 'next/navigation';
 
-export default function OverviewDashboardPage() {
-  return (
-    <AppLayout>
-      <OverviewDashboardContent />
-    </AppLayout>
-  );
+export default function RootPage() {
+  redirect('/intelligence');
 }

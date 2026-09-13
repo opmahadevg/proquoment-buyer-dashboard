@@ -25,7 +25,9 @@ const BOTTOM_NAV = [
 ];
 
 const PATH_TITLES: Record<string, string> = {
-  '/': 'Overview',
+  '/': 'Proquoment AI Intelligence',
+  '/intelligence': 'Proquoment AI Intelligence',
+  '/dashboard': 'Dashboard Overview',
   '/products-list': 'Products',
   '/new-product': 'New Product Sourcing',
   '/organization': 'Organization',

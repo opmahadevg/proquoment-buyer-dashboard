@@ -20,6 +20,7 @@
   --ring: #3b35e8;
   --radius: 8px;
   --font-sans: var(--font-plus-jakarta-sans), sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --positive: #16a34a;
   --positive-bg: #f0fdf4;
   --negative: #dc2626;
@@ -28,6 +29,13 @@
   --warning-bg: #fffbeb;
   --stage-quoting: #16a34a;
   --stage-draft: #6b7280;
+  --color-background: #ffffff;
+  --color-text: #0f0f1a;
+}
+
+.dark {
+  --color-background: #18181b;
+  --color-text: #f4f4f5;
 }
 
 @layer base {
@@ -226,6 +234,11 @@
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+  .font-numeric {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: 'tnum' 1, 'lnum' 1;
+    letter-spacing: -0.015em;
+  }
   .text-primary {
     color: var(--primary);
   }
@@ -250,5 +263,39 @@
   .announcement-banner {
     background-color: var(--primary);
     color: var(--primary-foreground);
+  }
+  .rotatingGradient {
+    --r: 0deg;
+    background: conic-gradient(
+      from var(--r),
+      #ff4545 0deg,
+      #ffb800 60deg,
+      #00ff99 120deg,
+      #006aff 180deg,
+      #9333ea 240deg,
+      #ff0095 300deg,
+      #ff4545 360deg
+    );
+    animation: rotateGradient 4s linear infinite;
+    transition: all 0.3s ease;
+  }
+  .rotatingGradient:hover {
+    animation-duration: 2s;
+    filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.4));
+  }
+}
+
+@property --r {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rotateGradient {
+  0% {
+    --r: 0deg;
+  }
+  100% {
+    --r: 360deg;
   }
 }

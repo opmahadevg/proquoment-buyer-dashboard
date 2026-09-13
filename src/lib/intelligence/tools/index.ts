@@ -1,0 +1,42 @@
+import { globalToolRegistry } from './registry';
+import { identifyProductTool } from './identify-product';
+import { identifyHsCodeTool } from './identify-hs-code';
+import { getTradeFlowsTool } from './get-trade-flows';
+import { getPriceDataTool } from './get-price-data';
+import { getRegulatoryRequirementsTool } from './get-regulatory-requirements';
+import { getSupplierLandscapeTool } from './get-supplier-landscape';
+import { getTariffDataTool } from './get-tariff-data';
+import { getFreightEstimateTool } from './get-freight-estimate';
+import { calculateLandedCostTool } from './calculate-landed-cost';
+import { compareOriginsTool } from './compare-origins';
+import { getMarketNewsTool } from './get-market-news';
+import { getProquomentRfqDataTool } from './get-proquoment-rfq-data';
+
+export * from './types';
+export * from './registry';
+export * from './identify-product';
+export * from './identify-hs-code';
+export * from './get-trade-flows';
+export * from './get-price-data';
+export * from './get-regulatory-requirements';
+export * from './get-supplier-landscape';
+export * from './get-tariff-data';
+export * from './get-freight-estimate';
+export * from './calculate-landed-cost';
+export * from './compare-origins';
+export * from './get-market-news';
+export * from './get-proquoment-rfq-data';
+
+// Register all capability tools
+globalToolRegistry.register(identifyProductTool);
+globalToolRegistry.register(identifyHsCodeTool);
+globalToolRegistry.register(getTradeFlowsTool);
+globalToolRegistry.register(getPriceDataTool);
+globalToolRegistry.register(getRegulatoryRequirementsTool);
+globalToolRegistry.register(getSupplierLandscapeTool);
+globalToolRegistry.register(getTariffDataTool);
+globalToolRegistry.register(getFreightEstimateTool);
+globalToolRegistry.register(calculateLandedCostTool);
+globalToolRegistry.register(compareOriginsTool);
+globalToolRegistry.register(getMarketNewsTool);
+globalToolRegistry.register(getProquomentRfqDataTool);

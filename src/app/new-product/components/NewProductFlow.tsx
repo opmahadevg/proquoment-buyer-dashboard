@@ -1580,13 +1580,64 @@ export default function NewProductFlow() {
   // ── Isolated product+design query from extraction (for accurate image search) ──
   const [extractionDesignQuery, setExtractionDesignQuery] = useState('');
 
-  // ── Check for draft query param on mount ──
+  // ── Check for draft or intelligence prefill query param on mount ──
   useEffect(() => {
     const draft = searchParams.get('draft');
     if (draft) {
       setDraftId(draft);
       setStep('builder');
       setProductText('(Resuming draft)');
+      return;
+    }
+
+    const isPrefill = searchParams.get('prefill') === 'true';
+    if (isPrefill) {
+      const pName = searchParams.get('product_name') || 'Sourced Product';
+      const category = searchParams.get('category') || '';
+      const hsCode = searchParams.get('hs_code') || '';
+      const orderQty = searchParams.get('order_quantity') || '';
+      const material = searchParams.get('material_grade') || '';
+      const packaging = searchParams.get('packaging') || '';
+      const dimensions = searchParams.get('dimensions') || '';
+      const destination = searchParams.get('destination') || '';
+      const origin = searchParams.get('origin') || '';
+      const targetFob = searchParams.get('target_fob') || '';
+      const targetLanded = searchParams.get('target_landed') || '';
+      const certs = searchParams.get('certifications') || '';
+      const notes = searchParams.get('notes') || '';
+
+      const specsList: { label: string; value: string }[] = [];
+      if (hsCode) specsList.push({ label: 'HS Tariff Code', value: hsCode });
+      if (material) specsList.push({ label: 'Material Grade & Spec', value: material });
+      if (dimensions) specsList.push({ label: 'Dimensions / Tolerance', value: dimensions });
+      if (certs) specsList.push({ label: 'Compliance Standards', value: certs });
+
+      const mfgList: { label: string; value: string }[] = [];
+      if (origin) mfgList.push({ label: 'Target Origin Country', value: origin });
+      if (packaging) mfgList.push({ label: 'Packaging', value: packaging });
+      if (notes) mfgList.push({ label: 'Buyer Directives', value: notes });
+
+      const commList: { label: string; value: string }[] = [];
+      if (orderQty) commList.push({ label: 'Target Volume', value: orderQty });
+      if (destination) commList.push({ label: 'Discharge Destination', value: destination });
+      if (targetFob) commList.push({ label: 'Target FOB Unit Price', value: `$${targetFob} USD` });
+      if (targetLanded) commList.push({ label: 'Modeled Landed Cost', value: `$${targetLanded} USD` });
+
+      setExtractedRfqData({
+        productName: pName,
+        category,
+        description: `RFQ generated from Sourcing Briefing for ${pName}. Target origin: ${origin || 'verified origins'}, destination: ${destination || 'destination'}.`,
+        moq: orderQty,
+        intendedUse: category || pName,
+        specifications: specsList,
+        manufacturingNotes: mfgList,
+        commercialTerms: commList,
+        ambiguities: [],
+        categoryRelevantFields: [],
+      });
+
+      setProductText(pName);
+      setStep('builder');
     }
   }, [searchParams]);
 
