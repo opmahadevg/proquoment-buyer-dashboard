@@ -22,6 +22,12 @@ export interface AccumulatedSpecs {
   targetLeadTimeDays?: number;
   budgetRangeUSD?: { min?: number; max?: number };
   additionalNotes?: string;
+  /** Proactive AI-suggested fields pending or approved by buyer */
+  aiSuggestedFields?: Record<string, {
+    value: string;
+    reason: string;
+    confirmed: boolean;
+  }>;
 }
 
 export interface SpecElicitationState {
@@ -111,6 +117,14 @@ export function mergeAccumulatedSpecs(
   if (Array.isArray(updates.certifications) && updates.certifications.length > 0) {
     const combined = [...(merged.certifications || []), ...updates.certifications];
     merged.certifications = Array.from(new Set(combined.filter((c) => Boolean(c && typeof c === 'string' && c.trim()))));
+  }
+
+  // 2.5 Merge aiSuggestedFields
+  if (updates.aiSuggestedFields && typeof updates.aiSuggestedFields === 'object') {
+    merged.aiSuggestedFields = {
+      ...(merged.aiSuggestedFields || {}),
+      ...updates.aiSuggestedFields,
+    };
   }
 
   // 3. Conversation history fallback scan if key fields are still missing

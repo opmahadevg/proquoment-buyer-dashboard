@@ -515,33 +515,7 @@ export class BriefingSynthesizer {
   }
 
   generateSuggestedActions(specs: AccumulatedSpecs, research: DeepResearchResult): SuggestedAction[] {
-    const product = specs.product || 'this product';
-    return [
-      {
-        id: 'act_edit_brief',
-        label: 'Customize Briefing Specs & Origins',
-        prompt: `I want to customize the specifications, target FOB price, or preferred origin for ${product}.`,
-        actionType: 'provide_parameter',
-      },
-      {
-        id: 'act_compare',
-        label: 'Compare India vs China in Detail',
-        prompt: `Compare India and China in depth for sourcing ${product} to ${specs.destination || 'Indonesia'}.`,
-        actionType: 'compare_origins',
-      },
-      {
-        id: 'act_landed_scenarios',
-        label: 'Calculate Landed Cost Scenarios',
-        prompt: 'Calculate landed cost scenarios with 40ft containers and different order volumes.',
-        actionType: 'check_landed_cost',
-      },
-      {
-        id: 'act_suppliers',
-        label: 'View Verified Suppliers',
-        prompt: `Show verified factories and manufacturing clusters for ${product}.`,
-        actionType: 'custom_query',
-      },
-    ];
+    return [];
   }
 
   calculateRFQReadiness(specs: AccumulatedSpecs, research: DeepResearchResult): RFQReadiness {

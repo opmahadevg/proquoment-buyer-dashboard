@@ -175,31 +175,44 @@ export function MessageBubble({
           )}
           {/* Issue #1: chips use whitespace-nowrap to prevent truncation */}
           <div className="flex flex-wrap gap-2">
-            {msg.options.map((opt, idx) => {
-              const isSingleSelected = !isMultiSelect && selectedSingle === opt;
-              const isMultiSelected = isMultiSelect && selectedMulti.has(opt);
-              const isSelected = isSingleSelected || isMultiSelected;
-              const isDisabledSingle = !isMultiSelect && (isLoading || !!selectedSingle);
-              const isDisabledMulti = isMultiSelect && (isLoading || multiConfirmed);
-              return (
-                <button
-                  key={`${idx}-${opt}`}
-                  onClick={() => isMultiSelect ? handleMultiToggle(opt) : handleSingleSelect(opt)}
-                  disabled={isDisabledSingle || isDisabledMulti}
-                  className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0
-                    ${
-                      isSelected
-                        ? 'bg-[#0D0D14] border-[#0D0D14] text-white'
-                        : (isDisabledSingle || isDisabledMulti)
-                          ? 'border-gray-200 text-gray-300 bg-white'
-                          : 'border-gray-300 text-[#0D0D14] bg-white hover:border-[#0D0D14] hover:bg-[#F5F5F8]'
-                    }`}
-                >
-                  {isSelected && <CheckCircle size={12} className="inline mr-1.5 -mt-0.5" />}
-                  {opt}
-                </button>
-              );
-            })}
+            {[...msg.options]
+              .sort((a, b) => {
+                const aSuggest = a.toLowerCase().includes('suggest');
+                const bSuggest = b.toLowerCase().includes('suggest');
+                if (aSuggest && !bSuggest) return -1;
+                if (!aSuggest && bSuggest) return 1;
+                return 0;
+              })
+              .map((opt, idx) => {
+                const isSingleSelected = !isMultiSelect && selectedSingle === opt;
+                const isMultiSelected = isMultiSelect && selectedMulti.has(opt);
+                const isSelected = isSingleSelected || isMultiSelected;
+                const isDisabledSingle = !isMultiSelect && (isLoading || !!selectedSingle);
+                const isDisabledMulti = isMultiSelect && (isLoading || multiConfirmed);
+                const isSuggestOption = opt.toLowerCase().includes('suggest');
+
+                return (
+                  <button
+                    key={`${idx}-${opt}`}
+                    onClick={() => isMultiSelect ? handleMultiToggle(opt) : handleSingleSelect(opt)}
+                    disabled={isDisabledSingle || isDisabledMulti}
+                    className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0 flex items-center gap-1.5
+                      ${
+                        isSelected
+                          ? 'bg-[#0D0D14] border-[#0D0D14] text-white'
+                          : (isDisabledSingle || isDisabledMulti)
+                            ? 'border-gray-200 text-gray-300 bg-white'
+                            : isSuggestOption
+                              ? 'border-indigo-400 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-600 font-semibold ring-1 ring-indigo-200 shadow-2xs'
+                              : 'border-gray-300 text-[#0D0D14] bg-white hover:border-[#0D0D14] hover:bg-[#F5F5F8]'
+                      }`}
+                  >
+                    {isSelected && <CheckCircle size={12} className="inline mr-1 -mt-0.5" />}
+                    {!isSelected && isSuggestOption && <span className="text-xs">✨</span>}
+                    <span>{opt}</span>
+                  </button>
+                );
+              })}
           </div>
           {/* Issue #8: confirm button for multi-select */}
           {isMultiSelect && !multiConfirmed && selectedMulti.size > 0 && (

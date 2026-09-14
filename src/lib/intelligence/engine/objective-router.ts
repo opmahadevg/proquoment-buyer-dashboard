@@ -19,6 +19,7 @@ import {
 } from '../core/conversation-state';
 import { OBJECTIVE_ROUTER_PROMPT, INTAKE_EVALUATION_PROMPT, SPEC_ELICITOR_PROMPT } from '../ai/system-prompts';
 import { AttachmentAnalysisSummary } from '../core/attachment-analysis';
+import { generateSmartDefaults, isSuggestRequest } from '@/lib/rfq/ai-suggest-defaults';
 
 export type ConversationalIntent =
   | 'brief_confirmation'
@@ -39,6 +40,11 @@ export class ObjectiveRouter {
     accumulatedSpecs?: AccumulatedSpecs
   ): Promise<ConversationalIntent> {
     const normMsg = userQuery.toLowerCase().trim();
+
+    // 0. Smart Defaults / "Suggest Me" Request during Brief Creation
+    if (isSuggestRequest(userQuery)) {
+      return 'spec_intake';
+    }
 
     // 1. Brief Confirmation Gate
     const isConfirming = Boolean(
@@ -251,8 +257,15 @@ export class ObjectiveRouter {
       ];
     }
 
+    const suggestOption: IntakeOption = {
+      label: '✨ Suggest me — standard market defaults',
+      value: `Suggest standard market specifications and shipment terms for ${product || 'this product'} to ${d}`,
+      field: 'general',
+    };
+
     if (p.includes('teddy') || p.includes('toy') || p.includes('plush')) {
       return [
+        suggestOption,
         { label: `5,000 units (${d})`, value: `5,000 units for ${d}, plush polyester 30cm`, field: 'quantity' },
         { label: `10,000 units (${d})`, value: `10,000 units for ${d}, CE / SNI certified`, field: 'quantity' },
         { label: `1 x 40ft Container (~12,000 pcs)`, value: `1 x 40ft container for ${d}`, field: 'quantity' },
@@ -262,6 +275,7 @@ export class ObjectiveRouter {
 
     if (p.includes('benzoate') || p.includes('chemical')) {
       return [
+        suggestOption,
         { label: `500 MT (${d})`, value: `500 MT for ${d}, food grade`, field: 'quantity' },
         { label: `100 MT (${d})`, value: `100 MT for ${d}, industrial grade`, field: 'quantity' },
         { label: `1 x 20ft FCL (20 MT)`, value: `20 MT (1 FCL) for ${d}`, field: 'quantity' },
@@ -269,6 +283,7 @@ export class ObjectiveRouter {
     }
 
     return [
+      suggestOption,
       { label: `5,000 units for ${d}`, value: `5,000 units for ${d}`, field: 'quantity' },
       { label: `10,000 units for ${d}`, value: `10,000 units for ${d}`, field: 'quantity' },
       { label: `1 x 20ft FCL for ${d}`, value: `1 x 20ft FCL container for ${d}`, field: 'quantity' },
@@ -496,6 +511,37 @@ export class ObjectiveRouter {
         updatedSpecs.product = this.extractProductName(userMessage, conversationHistory);
       }
 
+      // Check if buyer requested AI smart defaults / "Suggest me"
+      const isSuggesting = isSuggestRequest(userMessage);
+      if (isSuggesting && updatedSpecs.product) {
+        const smartDefaults = generateSmartDefaults(
+          updatedSpecs.product,
+          updatedSpecs.destination,
+          updatedSpecs.quantity,
+          updatedSpecs.unit
+        );
+
+        const autoSpecs: Partial<AccumulatedSpecs> = {};
+        const suggestedMap: Record<string, { value: string; reason: string; confirmed: boolean }> = {};
+
+        for (const sug of smartDefaults.suggestions) {
+          suggestedMap[sug.field] = {
+            value: sug.value,
+            reason: sug.reason,
+            confirmed: false,
+          };
+          if (sug.field === 'specifications.material_grade') {
+            autoSpecs.materialGrade = sug.value;
+          } else if (sug.field === 'compliance.certifications') {
+            autoSpecs.certifications = sug.value.split(',').map((s) => s.trim());
+          } else if (sug.field === 'packaging.packaging_type') {
+            autoSpecs.packaging = sug.value;
+          }
+        }
+        autoSpecs.aiSuggestedFields = suggestedMap;
+        updatedSpecs = mergeAccumulatedSpecs(updatedSpecs, autoSpecs);
+      }
+
       const newStageFromModel: SpecStage = (parsed.nextStage as SpecStage) || elicitationState.currentStage;
       const hasBase = Boolean(updatedSpecs.product && updatedSpecs.quantity && updatedSpecs.destination);
 
@@ -511,7 +557,9 @@ export class ObjectiveRouter {
       let ready = false;
       let newStage: SpecStage = newStageFromModel;
 
-      if (hasBase) {
+      if (isSuggesting && updatedSpecs.product) {
+        newStage = 'confirmation';
+      } else if (hasBase) {
         if (isBuyerConfirmingBriefing && !isBuyerAskingMore) {
           ready = true;
           newStage = 'complete';
@@ -544,7 +592,21 @@ export class ObjectiveRouter {
       let agentQuestion = parsed.agentQuestion || this.generateStageQuestion(newStage, updatedSpecs);
       let suggestedOptions: IntakeOption[] = parsed.suggestedOptions || [];
 
-      if (newStage === 'confirmation') {
+      if (isSuggesting && updatedSpecs.product) {
+        const destName = updatedSpecs.destination || 'your destination market';
+        agentQuestion = `Based on standard export practices for **${updatedSpecs.product}** delivered to **${destName}**, I've filled in standard baseline specifications:\n\n` +
+          (updatedSpecs.materialGrade ? `• **Quality & Heat Grade**: ${updatedSpecs.materialGrade}\n` : '') +
+          (updatedSpecs.packaging ? `• **Packaging Format**: ${updatedSpecs.packaging}\n` : '') +
+          (updatedSpecs.certifications?.length ? `• **Testing & Compliance**: ${updatedSpecs.certifications.join(', ')}\n` : '') +
+          `\nThese market norms protect your shipment in ocean transit and ensure smooth customs clearance without extra regulatory friction. Would you like me to prepare the Executive Sourcing Briefing with these parameters, or would you like to adjust anything?`;
+
+        suggestedOptions = [
+          { label: 'Prepare Executive Sourcing Briefing', value: 'Yes, prepare the Executive Sourcing Briefing now', field: 'general' },
+          { label: 'Adjust specifications', value: "I'd like to adjust the specifications", field: 'specifications' },
+          { label: 'Set target budget', value: 'Our target budget is $... per unit', field: 'specifications' },
+          { label: 'Set delivery timeline', value: 'Target delivery timeline is ... days', field: 'timeline' },
+        ];
+      } else if (newStage === 'confirmation') {
         // If the model produced a natural conversational response, preserve it!
         // Only use the canned stage question if agentQuestion is empty.
         if (!agentQuestion || agentQuestion.trim().length === 0) {
@@ -553,6 +615,7 @@ export class ObjectiveRouter {
         if (!suggestedOptions || suggestedOptions.length === 0) {
           suggestedOptions = [
             { label: 'Prepare Executive Sourcing Briefing', value: 'Yes, prepare the Executive Sourcing Briefing now', field: 'general' },
+            { label: '✨ Suggest me — optimize with market defaults', value: 'Suggest standard market specifications and shipment terms', field: 'general' },
             { label: 'Add more details', value: "I'd like to add more details", field: 'specifications' },
             { label: 'Set target budget', value: 'Our target budget is $... per unit', field: 'specifications' },
             { label: 'Set delivery timeline', value: 'Target delivery timeline is ... days', field: 'timeline' },
@@ -560,6 +623,16 @@ export class ObjectiveRouter {
         }
       } else if (!suggestedOptions || suggestedOptions.length === 0) {
         suggestedOptions = this.generateDefaultOptions(updatedSpecs.product, updatedSpecs.destination);
+      }
+
+      // Ensure "Suggest me" option is present as first option when in specifications stage
+      const hasSuggestOpt = suggestedOptions.some((opt) => opt.label.toLowerCase().includes('suggest') || opt.value.toLowerCase().includes('suggest'));
+      if (!hasSuggestOpt && (newStage === 'specifications' || !updatedSpecs.materialGrade)) {
+        suggestedOptions.unshift({
+          label: '✨ Suggest me — standard market defaults',
+          value: `Suggest standard market specifications and shipment terms for ${updatedSpecs.product || 'this product'} to ${updatedSpecs.destination || 'destination'}`,
+          field: 'general',
+        });
       }
 
       return {
@@ -689,7 +762,36 @@ export class ObjectiveRouter {
     else if (!specs.quantity) next = 'quantity';
     else if (!specs.destination) next = 'destination';
     else if (!specs.materialGrade && !specs.certifications?.length && state.turnCount < 1) next = 'specifications';
-    else next = 'confirmation';
+    const isSuggesting = isSuggestRequest(userMessage);
+    if (isSuggesting && specs.product) {
+      const smartDefaults = generateSmartDefaults(
+        specs.product,
+        specs.destination,
+        specs.quantity,
+        specs.unit
+      );
+
+      const autoSpecs: Partial<AccumulatedSpecs> = {};
+      const suggestedMap: Record<string, { value: string; reason: string; confirmed: boolean }> = {};
+
+      for (const sug of smartDefaults.suggestions) {
+        suggestedMap[sug.field] = {
+          value: sug.value,
+          reason: sug.reason,
+          confirmed: false,
+        };
+        if (sug.field === 'specifications.material_grade') {
+          autoSpecs.materialGrade = sug.value;
+        } else if (sug.field === 'compliance.certifications') {
+          autoSpecs.certifications = sug.value.split(',').map((s) => s.trim());
+        } else if (sug.field === 'packaging.packaging_type') {
+          autoSpecs.packaging = sug.value;
+        }
+      }
+      autoSpecs.aiSuggestedFields = suggestedMap;
+      Object.assign(specs, autoSpecs);
+      next = 'confirmation';
+    }
 
     const normMsg = userMessage.toLowerCase().trim();
     const isBuyerConfirming = Boolean(
@@ -701,10 +803,10 @@ export class ObjectiveRouter {
     );
 
     let ready = false;
-    if (hasBase && isBuyerConfirming && !isBuyerAddingMore) {
+    if (hasBase && isBuyerConfirming && !isBuyerAddingMore && !isSuggesting) {
       ready = true;
       next = 'complete';
-    } else if (hasBase) {
+    } else if (hasBase || isSuggesting) {
       next = 'confirmation';
     }
 
@@ -728,10 +830,27 @@ export class ObjectiveRouter {
       complete: 100,
     };
 
+    let question = this.generateStageQuestion(ready ? 'complete' : next, specs);
     let options: IntakeOption[];
-    if (next === 'confirmation') {
+
+    if (isSuggesting && specs.product) {
+      const destName = specs.destination || 'your destination market';
+      question = `Based on standard export practices for **${specs.product}** delivered to **${destName}**, I've filled in standard baseline specifications:\n\n` +
+        (specs.materialGrade ? `• **Quality & Heat Grade**: ${specs.materialGrade}\n` : '') +
+        (specs.packaging ? `• **Packaging Format**: ${specs.packaging}\n` : '') +
+        (specs.certifications?.length ? `• **Testing & Compliance**: ${specs.certifications.join(', ')}\n` : '') +
+        `\nThese market norms protect your shipment in ocean transit and ensure smooth customs clearance without extra regulatory friction. Would you like me to prepare the Executive Sourcing Briefing with these parameters, or would you like to adjust anything?`;
+
       options = [
         { label: 'Prepare Executive Sourcing Briefing', value: 'Yes, prepare the Executive Sourcing Briefing now', field: 'general' },
+        { label: 'Adjust specifications', value: "I'd like to adjust the specifications", field: 'specifications' },
+        { label: 'Set target budget', value: 'Our target budget is $... per unit', field: 'specifications' },
+        { label: 'Set delivery timeline', value: 'Target delivery timeline is ... days', field: 'timeline' },
+      ];
+    } else if (next === 'confirmation') {
+      options = [
+        { label: 'Prepare Executive Sourcing Briefing', value: 'Yes, prepare the Executive Sourcing Briefing now', field: 'general' },
+        { label: '✨ Suggest me — optimize with market defaults', value: 'Suggest standard market specifications and shipment terms', field: 'general' },
         { label: 'Add more details', value: "I'd like to add more details", field: 'specifications' },
         { label: 'Set target budget', value: 'Our target budget is $... per unit', field: 'specifications' },
         { label: 'Set delivery timeline', value: 'Target delivery timeline is ... days', field: 'timeline' },
@@ -743,7 +862,7 @@ export class ObjectiveRouter {
     return {
       stage: ready ? 'complete' : next,
       isResearchReady: ready,
-      agentQuestion: this.generateStageQuestion(ready ? 'complete' : next, specs),
+      agentQuestion: question,
       agentRationale: 'Precision sourcing requires validating specifications and regulatory boundaries before trade data modeling.',
       suggestedOptions: options,
       updatedSpecs: specs,

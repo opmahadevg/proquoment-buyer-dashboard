@@ -174,16 +174,32 @@ export const SpecElicitationCard: React.FC<SpecElicitationCardProps> = ({ data, 
               Quick Selection:
             </p>
             <div className="flex flex-wrap gap-2">
-              {suggestedOptions.map((opt, i) => (
-                <button
-                  key={i}
-                  onClick={() => onOptionClick?.(opt.value)}
-                  className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer text-left"
-                >
-                  <span>{opt.label}</span>
-                  <ChevronRight className="w-3 h-3 text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                </button>
-              ))}
+              {[...suggestedOptions]
+                .sort((a, b) => {
+                  const aSuggest = a.label.toLowerCase().includes('suggest') || a.value.toLowerCase().includes('suggest');
+                  const bSuggest = b.label.toLowerCase().includes('suggest') || b.value.toLowerCase().includes('suggest');
+                  if (aSuggest && !bSuggest) return -1;
+                  if (!aSuggest && bSuggest) return 1;
+                  return 0;
+                })
+                .map((opt, i) => {
+                  const isSuggestMe = opt.label.toLowerCase().includes('suggest') || opt.value.toLowerCase().includes('suggest');
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => onOptionClick?.(opt.value)}
+                      className={`group flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer text-left ${
+                        isSuggestMe
+                          ? 'border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 shadow-2xs ring-1 ring-indigo-200 dark:ring-indigo-800'
+                          : 'border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:text-indigo-600 dark:hover:text-indigo-400'
+                      }`}
+                    >
+                      {isSuggestMe && <span className="text-xs">✨</span>}
+                      <span>{opt.label}</span>
+                      <ChevronRight className="w-3 h-3 text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                    </button>
+                  );
+                })}
             </div>
           </div>
         )}

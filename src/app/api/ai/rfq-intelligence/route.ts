@@ -220,6 +220,19 @@ export async function POST(request: NextRequest) {
     if (typeof parsedResponse.multi_select !== 'boolean') parsedResponse.multi_select = false;
     if (!Array.isArray(parsedResponse.rfq_updates)) parsedResponse.rfq_updates = [];
 
+    // Ensure 'Suggest me' default option is present when asking specification questions
+    const hasSuggest = parsedResponse.ai_options.some((opt: any) => {
+      const val = (opt?.label || opt?.value || '').toLowerCase();
+      return val.includes('suggest');
+    });
+    const isCompleted = parsedResponse.buyer_message?.toLowerCase().includes('rfq is now complete');
+    if (!hasSuggest && !isCompleted && parsedResponse.ai_options.length > 0) {
+      parsedResponse.ai_options.unshift({
+        label: "✨ Suggest me standard specifications",
+        value: "Suggest standard specifications and packaging based on market norms"
+      });
+    }
+
     return NextResponse.json({
       data: parsedResponse,
       usage: data.usage

@@ -266,25 +266,48 @@ export const IntelligenceChatMessage: React.FC<Props> = ({
       )}
 
       {/* 3. Action Chips */}
-      {suggestedActions && suggestedActions.length > 0 && (
+      {suggestedActions && suggestedActions.length > 0 && !cards.some((c) => c.type === 'sourcing_briefing') && (
         <div className="flex flex-wrap gap-2 mt-4">
           {suggestedActions
             .filter(
               (action) =>
                 action.id !== 'act_rfq' &&
                 action.id !== 'launch-rfq' &&
-                !action.label.toLowerCase().includes('launch rfq')
+                action.id !== 'act_edit_brief' &&
+                action.id !== 'act_compare' &&
+                action.id !== 'act_landed_scenarios' &&
+                action.id !== 'act_suppliers' &&
+                !action.label.toLowerCase().includes('launch rfq') &&
+                !action.label.toLowerCase().includes('customize briefing') &&
+                !action.label.toLowerCase().includes('compare india vs china') &&
+                !action.label.toLowerCase().includes('calculate landed cost') &&
+                !action.label.toLowerCase().includes('view verified suppliers')
             )
-            .map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                onClick={() => onActionClick?.(action.prompt)}
-                className="px-3.5 py-1.5 rounded-full border border-gray-300 dark:border-zinc-700 hover:border-[#0D0D14] dark:hover:border-zinc-300 text-sm font-medium text-[#0D0D14] dark:text-zinc-200 bg-white dark:bg-zinc-900 hover:bg-[#F5F5F8] dark:hover:bg-zinc-800 transition-all duration-150 whitespace-nowrap flex-shrink-0 cursor-pointer shadow-2xs"
-              >
-                {action.label}
-              </button>
-            ))}
+            .sort((a, b) => {
+              const aSuggest = a.label.toLowerCase().includes('suggest') || a.id.includes('suggest');
+              const bSuggest = b.label.toLowerCase().includes('suggest') || b.id.includes('suggest');
+              if (aSuggest && !bSuggest) return -1;
+              if (!aSuggest && bSuggest) return 1;
+              return 0;
+            })
+            .map((action) => {
+              const isSuggestMe = action.label.toLowerCase().includes('suggest') || action.id.includes('suggest');
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={() => onActionClick?.(action.prompt)}
+                  className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 whitespace-nowrap flex-shrink-0 cursor-pointer shadow-2xs flex items-center gap-1.5 ${
+                    isSuggestMe
+                      ? 'border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-semibold ring-1 ring-indigo-200 dark:ring-indigo-800'
+                      : 'border-gray-300 dark:border-zinc-700 hover:border-[#0D0D14] dark:hover:border-zinc-300 text-[#0D0D14] dark:text-zinc-200 bg-white dark:bg-zinc-900 hover:bg-[#F5F5F8] dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  {isSuggestMe && <span className="text-sm">✨</span>}
+                  <span>{action.label}</span>
+                </button>
+              );
+            })}
         </div>
       )}
 
