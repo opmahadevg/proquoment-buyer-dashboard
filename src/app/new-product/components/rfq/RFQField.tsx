@@ -1,14 +1,18 @@
-import React from 'react';
-import { ProvenancedField } from '@/lib/rfq/types';
+import React, { useState } from 'react';
+import { ProvenancedField, SizeRunMatrix } from '@/lib/rfq/types';
 import { CheckCircle, Eye, Sparkles, FileText, User } from 'lucide-react';
+import { SizeRunGrid } from './SizeRunGrid';
+import { parseSizeRunText } from '@/lib/rfq/synthesizer/size-run-parser';
 
 interface RFQFieldProps {
   label: string;
   field: ProvenancedField | null;
+  renderType?: string;
   onEdit?: (newValue: string) => void;
+  onUpdateSizeRun?: (matrix: SizeRunMatrix) => void;
 }
 
-export function RFQField({ label, field, onEdit }: RFQFieldProps) {
+export function RFQField({ label, field, renderType, onEdit, onUpdateSizeRun }: RFQFieldProps) {
   if (!field || !field.value) {
     return (
       <div className="flex flex-col py-2 border-b border-gray-100">
@@ -36,6 +40,8 @@ export function RFQField({ label, field, onEdit }: RFQFieldProps) {
     badgeText = 'Visual AI';
   }
 
+  const isSizeGrid = renderType === 'size_grid' || label.toLowerCase().includes('size range') || label.toLowerCase().includes('size breakdown');
+
   return (
     <div className="flex flex-col py-2 border-b border-gray-100 group">
       <div className="flex items-center justify-between mb-0.5">
@@ -45,20 +51,37 @@ export function RFQField({ label, field, onEdit }: RFQFieldProps) {
           {badgeText}
         </div>
       </div>
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-[#0D0D14] font-medium">{field.value}</span>
-        {onEdit && (
-          <button
-            onClick={() => {
-              const val = prompt(`Edit ${label}`, field.value || '');
-              if (val !== null) onEdit(val);
+
+      {isSizeGrid ? (
+        <div>
+          <span className="text-xs text-zinc-500 font-mono mb-1 block">{field.value}</span>
+          <SizeRunGrid
+            matrix={parseSizeRunText(field.value)}
+            onUpdate={(matrix) => {
+              if (onUpdateSizeRun) onUpdateSizeRun(matrix);
+              if (onEdit) {
+                const formatted = matrix.entries.map(e => `${e.size_label}: ${e.quantity}`).join(', ');
+                onEdit(formatted);
+              }
             }}
-            className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 hover:bg-indigo-50 rounded"
-          >
-            Edit
-          </button>
-        )}
-      </div>
+          />
+        </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-[#0D0D14] font-medium">{field.value}</span>
+          {onEdit && (
+            <button
+              onClick={() => {
+                const val = prompt(`Edit ${label}`, field.value || '');
+                if (val !== null) onEdit(val);
+              }}
+              className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 hover:bg-indigo-50 rounded"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

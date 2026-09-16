@@ -59,6 +59,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@types/pdf-parse": "^1.1.5",
     "@vercel/analytics": "^1.5.0",
+    "cheerio": "^1.2.0",
     "cobe": "^2.0.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",

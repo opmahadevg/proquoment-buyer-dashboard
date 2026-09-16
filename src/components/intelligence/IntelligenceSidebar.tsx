@@ -1,13 +1,12 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
-import { Sparkles, Plus, FolderKanban, MessageSquare, History, ChevronRight } from 'lucide-react';
-import { IntelligenceSession, WorkspaceSummary } from '@/lib/intelligence/store';
+import { Plus, MessageSquare, History } from 'lucide-react';
+import { IntelligenceSession } from '@/lib/intelligence/store';
 
 interface Props {
   sessions: IntelligenceSession[];
-  workspaces: WorkspaceSummary[];
+  workspaces?: any[];
   activeSessionId: string | null;
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
@@ -15,7 +14,6 @@ interface Props {
 
 export const IntelligenceSidebar: React.FC<Props> = ({
   sessions,
-  workspaces,
   activeSessionId,
   onSelectSession,
   onNewChat,
@@ -35,29 +33,6 @@ export const IntelligenceSidebar: React.FC<Props> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-6">
-        {/* Active Workspaces Section */}
-        <div>
-          <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider px-2 mb-2 flex items-center gap-1.5">
-            <FolderKanban className="w-3.5 h-3.5" />
-            <span>Sourcing Workspaces</span>
-          </div>
-          <div className="space-y-1">
-            {workspaces.map((ws) => (
-              <Link
-                key={ws.id}
-                href={`/intelligence/workspace/${ws.id}`}
-                className="flex items-center justify-between p-2 rounded-xl text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60 transition group"
-              >
-                <div className="truncate">
-                  <div className="truncate font-semibold text-zinc-900 dark:text-zinc-100">{ws.productName}</div>
-                  <div className="text-[10px] text-zinc-500">→ {ws.destinationCountry} (Score: {ws.sourcingScore || 85})</div>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 shrink-0" />
-              </Link>
-            ))}
-          </div>
-        </div>
-
         {/* Recent Chat Sessions Section */}
         <div>
           <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider px-2 mb-2 flex items-center gap-1.5">

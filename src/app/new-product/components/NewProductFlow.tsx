@@ -1564,8 +1564,23 @@ export default function NewProductFlow() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [step, setStep] = useState<Step>('intro');
-  const [productText, setProductText] = useState('');
+
+  // ── Synchronous initial state derived from URL params ──
+  // Avoids flash-of-IntroStep race condition when navigating with prefill/draft params.
+  const [step, setStep] = useState<Step>(() => {
+    if (typeof window === 'undefined') return 'intro';
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('draft')) return 'builder';
+    if (params.get('prefill') === 'true') return 'builder';
+    return 'intro';
+  });
+  const [productText, setProductText] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('draft')) return '(Resuming draft)';
+    if (params.get('prefill') === 'true') return params.get('product_name') || 'Sourced Product';
+    return '';
+  });
   const [rfqMethod, setRfqMethod] = useState<RFQMethod>('scratch');
   const [draftId, setDraftId] = useState<string | undefined>();
   // C3 FIX: capture selected images from ImageSearchStep to pass to BuilderStep
@@ -1592,6 +1607,39 @@ export default function NewProductFlow() {
 
     const isPrefill = searchParams.get('prefill') === 'true';
     if (isPrefill) {
+      // ── Decode intelligence reference images (URL param or sessionStorage fallback) ──
+      const refImagesParam = searchParams.get('ref_images');
+      let loadedRefImages: any[] = [];
+      if (refImagesParam) {
+        try {
+          const parsed = JSON.parse(refImagesParam);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            loadedRefImages = parsed;
+          }
+        } catch (e) {
+          console.warn('Failed to parse ref_images from URL:', e);
+        }
+      }
+
+      if (loadedRefImages.length === 0 && typeof window !== 'undefined') {
+        try {
+          const cached = sessionStorage.getItem('intelligence_ref_images');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              loadedRefImages = parsed;
+            }
+            sessionStorage.removeItem('intelligence_ref_images');
+          }
+        } catch (e) {
+          console.warn('Failed to parse ref_images from sessionStorage:', e);
+        }
+      }
+
+      if (loadedRefImages.length > 0) {
+        setSelectedImages(loadedRefImages);
+      }
+
       const pName = searchParams.get('product_name') || 'Sourced Product';
       const category = searchParams.get('category') || '';
       const hsCode = searchParams.get('hs_code') || '';

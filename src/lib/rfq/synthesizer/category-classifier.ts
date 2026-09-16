@@ -14,7 +14,14 @@ const CATEGORY_RULES: Array<{
   { keywords: ['ceramic', 'porcelain', 'stoneware', 'earthenware', 'bone china', 'pottery'],
     path: ['Materials', 'Ceramics'], schema_key: 'generic' },
   // Apparel
-  { keywords: ['shirt', 'dress', 'pants', 'jacket', 'clothing', 'garment', 'apparel', 't-shirt', 'hoodie', 'sweater'],
+  { keywords: [
+      'shirt', 'dress', 'pants', 'jacket', 'clothing', 'garment', 'apparel',
+      't-shirt', 'hoodie', 'sweater', 'jeans', 'denim', 'trouser', 'trousers',
+      'chino', 'shorts', 'skirt', 'blazer', 'coat', 'outerwear', 'polo',
+      'cardigan', 'pullover', 'underwear', 'lingerie', 'sleepwear',
+      'uniform', 'scrubs', 'workwear', 'activewear', 'athleisure',
+      'puffer', 'parka', '5-pocket', 'jogger'
+    ],
     path: ['Apparel & Textiles', 'Clothing'], schema_key: 'apparel' },
   // Footwear
   { keywords: ['shoe', 'shoes', 'sneaker', 'boot', 'sandal', 'footwear', 'slipper'],

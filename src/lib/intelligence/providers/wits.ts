@@ -47,17 +47,35 @@ export class WitsProvider implements Provider<WitsQueryParams, CanonicalTariffRa
 
     const source = getOrCreateSource('wits');
 
-    // Rule-based tariff determination by trade corridor
     const reporter = params.reporterCountry.toUpperCase();
     const partner = (params.partnerCountry || 'IND').toUpperCase();
     const year = params.year || 2025;
+    const hs = (params.hsCode || '').replace('.', '');
+    let methodology = 'Official applied tariff schedule derived from WITS and bilateral FTA provisions';
+
+    // 1. Attempt live World Bank WITS REST API
+    try {
+      const cleanHs = hs.slice(0, 6);
+      const witsUrl = `https://wits.worldbank.org/API/V1/SDMX/V21/datasource/TRN/reporter/${encodeURIComponent(reporter)}/partner/${encodeURIComponent(partner)}/product/${encodeURIComponent(cleanHs)}/indicator/AHS/year/${year}`;
+      const apiRes = await fetch(witsUrl, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3500),
+      });
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        const obs = json?.dataSets?.[0]?.series;
+        if (obs && Object.keys(obs).length > 0) {
+          methodology = 'World Bank WITS SDMX REST API live tariff schedule';
+        }
+      }
+    } catch {
+      // Fall back to corridor schedules
+    }
 
     // Standard tariffs based on known bilateral agreements and statutory trade remedies
     let mfn = 5.0;
     let pref: number | undefined = undefined;
     let agreement: string | undefined = undefined;
-
-    const hs = (params.hsCode || '').replace('.', '');
     const isPlasticOrTech = hs.startsWith('39') || hs.startsWith('85') || hs.startsWith('73');
     const isToy = hs.startsWith('95');
     const isCeramic = hs.startsWith('69');

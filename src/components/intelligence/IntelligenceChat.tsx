@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -10,6 +11,7 @@ import { DeepResearchProgressView } from './DeepResearchProgressView';
 import { IntelligenceMessageItem, IntelligenceAttachment, useIntelligenceStore } from '@/lib/intelligence/store';
 import { ResearchDepth, ResearchState } from '@/lib/intelligence/core';
 import { useAuth } from '@/contexts/AuthContext';
+import ImageSearchStep, { SelectedImage } from '@/app/new-product/components/ImageSearchStep';
 
 const THINKING_STATES = [
   'Understanding your sourcing requirements',
@@ -59,6 +61,7 @@ export const IntelligenceChat: React.FC<Props> = ({
   const router = useRouter();
   const { user } = useAuth();
   const {
+    sessions,
     messages,
     getMessages,
     addMessage,
@@ -149,13 +152,60 @@ export const IntelligenceChat: React.FC<Props> = ({
     }
   }, [initialQuery, isStreaming, targetSessionId, activeMessages]);
 
+  const [showImageSearch, setShowImageSearch] = useState(false);
+  const [imageSearchProductName, setImageSearchProductName] = useState('');
+
+  // Helper to extract product name from active conversation or session
+  const getCurrentProductName = useCallback((): string => {
+    if (elicitationState?.accumulatedSpecs?.product) {
+      return elicitationState.accumulatedSpecs.product;
+    }
+    const currentSession = sessions.find((s) => s.id === currentSessionId);
+    if (currentSession?.productName && currentSession.productName !== 'General Sourcing') {
+      return currentSession.productName;
+    }
+    for (const msg of activeMessages) {
+      const briefCard = msg.cards?.find((c) => c.type === 'sourcing_briefing');
+      if (briefCard?.data?.productProfile?.name) {
+        return briefCard.data.productProfile.name;
+      }
+      if (msg.attachmentAnalysis?.extractedSpecs?.productName) {
+        return msg.attachmentAnalysis.extractedSpecs.productName;
+      }
+    }
+    const firstUser = activeMessages.find((m) => m.role === 'user');
+    if (firstUser?.content && firstUser.content.length < 80) {
+      return firstUser.content;
+    }
+    return '';
+  }, [elicitationState, sessions, currentSessionId, activeMessages]);
+
+  const handleOpenImageSearch = useCallback((productName?: string) => {
+    const p = productName || getCurrentProductName() || '';
+    setImageSearchProductName(p);
+    setShowImageSearch(true);
+  }, [getCurrentProductName]);
+
   const handleSend = async (
     query: string,
     depth: ResearchDepth,
     attachments?: IntelligenceAttachment[],
     skipAddingUserMessage = false
   ) => {
-    if ((!query.trim() && (!attachments || attachments.length === 0)) || isStreaming) return;
+    const trimmed = query.trim();
+    if (
+      trimmed === '__OPEN_IMAGE_SEARCH__' ||
+      trimmed.toLowerCase() === 'provide reference images' ||
+      trimmed.toLowerCase() === 'provide reference image' ||
+      trimmed.toLowerCase() === 'add reference images' ||
+      trimmed.toLowerCase() === 'add reference image' ||
+      trimmed.toLowerCase() === 'search reference images'
+    ) {
+      handleOpenImageSearch();
+      return;
+    }
+
+    if ((!trimmed && (!attachments || attachments.length === 0)) || isStreaming) return;
 
     if (!skipAddingUserMessage) {
       const userMsg: IntelligenceMessageItem = {
@@ -297,7 +347,81 @@ export const IntelligenceChat: React.FC<Props> = ({
     }
   };
 
+  const handleImageSearchReturn = (images: SelectedImage[]) => {
+    setShowImageSearch(false);
+    if (!images || images.length === 0) return;
+
+    const newAttachments: IntelligenceAttachment[] = images.map((img) => ({
+      name: img.note ? `${img.title || 'Reference Image'} (${img.note})` : (img.title || 'Reference Image'),
+      type: 'image/jpeg',
+      url: img.original,
+      dataUrl: img.thumbnail || img.original,
+    }));
+
+    const notesSummary = images
+      .map((img, i) => (img.note ? `Image ${i + 1}: "${img.note}"` : null))
+      .filter(Boolean)
+      .join(', ');
+
+    const prodName = imageSearchProductName || getCurrentProductName() || 'the product';
+    const promptText = `Here are my reference images for ${prodName}${notesSummary ? ` (${notesSummary})` : ''}. Please examine these visual references and take their style, materials, and design details into account for the sourcing requirements.`;
+
+    handleSend(promptText, 'standard', newAttachments);
+  };
+
   const handleCreateRFQ = (customBrief?: any) => {
+    // Collect reference images from Intelligence messages
+    const refImages: Array<{
+      url: string;
+      thumbnail: string;
+      original: string;
+      title: string;
+      note: string;
+    }> = [];
+
+    for (const msg of activeMessages) {
+      if (!msg.attachments || msg.attachments.length === 0) continue;
+      for (const att of msg.attachments) {
+        if (!att.type?.startsWith('image/')) continue;
+        const rawUrl = att.url || att.dataUrl || '';
+        if (!rawUrl) continue;
+
+        const noteMatch = att.name?.match(/\(([^)]+)\)$/);
+        const note = noteMatch ? noteMatch[1].trim() : '';
+        const title = (att.name || 'Reference Image').replace(/\s*\([^)]+\)$/, '').trim();
+
+        if (!refImages.some((r) => r.url === rawUrl || (att.url && r.url === att.url))) {
+          refImages.push({
+            url: att.url || rawUrl,
+            thumbnail: (att.dataUrl && !att.dataUrl.startsWith('data:')) ? att.dataUrl : (att.url || rawUrl),
+            original: att.url || rawUrl,
+            title,
+            note,
+          });
+        }
+        if (refImages.length >= 8) break;
+      }
+      if (refImages.length >= 8) break;
+    }
+
+    if (typeof window !== 'undefined' && refImages.length > 0) {
+      try {
+        sessionStorage.setItem('intelligence_ref_images', JSON.stringify(refImages));
+      } catch (e) {
+        console.warn('Could not cache ref_images in sessionStorage', e);
+      }
+    }
+
+    const httpOnlyRefImages = refImages
+      .filter((r) => r.url.startsWith('http://') || r.url.startsWith('https://'))
+      .map((r) => ({
+        url: r.url,
+        thumbnail: r.thumbnail.startsWith('http') ? r.thumbnail : r.url,
+        original: r.original.startsWith('http') ? r.original : r.url,
+        title: r.title,
+        note: r.note,
+      }));
+
     if (customBrief) {
       const p = customBrief.productProfile || {};
       const m = customBrief.marketSnapshot || {};
@@ -307,7 +431,7 @@ export const IntelligenceChat: React.FC<Props> = ({
         .map((c: any) => c.item)
         .join(', ');
 
-      const query = new URLSearchParams({
+      const queryParams: Record<string, string> = {
         prefill: 'true',
         product_name: p.name || '',
         category: p.category || '',
@@ -322,11 +446,25 @@ export const IntelligenceChat: React.FC<Props> = ({
         target_landed: lc.totalLandedPerUnitUSD ? String(lc.totalLandedPerUnitUSD) : '',
         certifications: certs,
         notes: customBrief.buyerNotes || '',
-      }).toString();
+      };
 
+      if (httpOnlyRefImages.length > 0) {
+        queryParams.ref_images = JSON.stringify(httpOnlyRefImages);
+      }
+
+      const query = new URLSearchParams(queryParams).toString();
       router.push(`/new-product?${query}`);
     } else {
-      router.push('/new-product');
+      if (httpOnlyRefImages.length > 0) {
+        const query = new URLSearchParams({
+          prefill: 'true',
+          product_name: getCurrentProductName() || 'Sourced Product',
+          ref_images: JSON.stringify(httpOnlyRefImages),
+        }).toString();
+        router.push(`/new-product?${query}`);
+      } else {
+        router.push('/new-product');
+      }
     }
   };
 
@@ -398,7 +536,14 @@ export const IntelligenceChat: React.FC<Props> = ({
               attachmentAnalysis={msg.attachmentAnalysis}
               cards={msg.cards}
               suggestedActions={msg.suggestedActions}
-              onActionClick={(prompt) => handleSend(prompt, 'standard')}
+              onActionClick={(prompt) => {
+                if (prompt === '__OPEN_IMAGE_SEARCH__') {
+                  handleOpenImageSearch();
+                } else {
+                  handleSend(prompt, 'standard');
+                }
+              }}
+              onOpenImageSearch={() => handleOpenImageSearch()}
               onCreateRFQ={handleCreateRFQ}
               onUpdateBriefing={(cardId, updated) => updateCardData(currentSessionId, cardId, updated)}
             />
@@ -423,9 +568,41 @@ export const IntelligenceChat: React.FC<Props> = ({
       {/* Chat Input Container — Centered, 30% wider matching chat area */}
       <div className="flex-shrink-0 border-t border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
         <div className="max-w-4xl mx-auto">
-          <IntelligenceChatInput onSend={handleSend} disabled={isStreaming} variant="chat" />
+          <IntelligenceChatInput
+            onSend={handleSend}
+            disabled={isStreaming}
+            variant="chat"
+            onOpenImageSearch={() => handleOpenImageSearch()}
+          />
+          <p className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-2 px-4 leading-normal">
+            Proquoment AI can make mistakes. HS codes, tariffs, and landed costs are indicative.{' '}
+            <button
+              type="button"
+              onClick={() => handleCreateRFQ()}
+              className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline inline"
+            >
+              Submit an RFQ
+            </button>{' '}
+            for verified supplier quotes and guaranteed trade data.
+          </p>
         </div>
       </div>
+
+      {/* Reference Image Search Fullscreen Overlay with React Portal */}
+      {showImageSearch && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-white dark:bg-zinc-950 overflow-y-auto">
+          <ImageSearchStep
+            productText={imageSearchProductName || getCurrentProductName() || 'product photo'}
+            rfqId={`intel-${currentSessionId || Date.now()}`}
+            origin="intelligence"
+            intelligenceSessionId={currentSessionId}
+            onIntelligenceReturn={handleImageSearchReturn}
+            onNext={(imgs) => handleImageSearchReturn((imgs as any) || [])}
+            onSkip={() => setShowImageSearch(false)}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

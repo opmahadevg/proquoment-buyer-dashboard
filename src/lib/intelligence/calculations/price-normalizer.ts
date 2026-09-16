@@ -67,3 +67,69 @@ export function normalizePrice(raw: RawPricePoint): CalculationResult<Normalized
     explanation: `Normalized ${raw.currency} ${raw.value}/${raw.unit} to $${rounded.toLocaleString()} USD/MT`,
   };
 }
+
+export interface PerPieceConversion {
+  pricePerPieceUSD: number;
+  categoryKey: string;
+  weightPerPieceKG: number;
+  pricePerMT_USD: number;
+  conversionNote: string;
+}
+
+export const CATEGORY_UNIT_WEIGHTS_KG: Record<string, number> = {
+  denim_jeans: 0.85,
+  jeans: 0.85,
+  denim: 0.85,
+  trouser: 0.60,
+  pants: 0.60,
+  denim_jacket: 1.10,
+  jacket: 0.90,
+  outerwear: 1.00,
+  t_shirt: 0.20,
+  shirt: 0.25,
+  polo: 0.25,
+  sweater: 0.45,
+  hoodie: 0.65,
+  dress: 0.35,
+  shorts: 0.35,
+  blanket: 1.50,
+  towel: 0.45,
+  bed_sheet: 0.65,
+  ceramic_mug: 0.38,
+  dinner_plate: 0.55,
+  tote_bag: 0.28,
+  phone_case: 0.04,
+  shoes: 0.95,
+  footwear: 0.95,
+};
+
+export function normalizeToPerPiece(
+  pricePerMT: number,
+  productNameOrCategory: string
+): PerPieceConversion | null {
+  const q = productNameOrCategory.toLowerCase();
+  let matchedKey: string | null = null;
+  let weightKG = 0;
+
+  for (const [key, w] of Object.entries(CATEGORY_UNIT_WEIGHTS_KG)) {
+    if (q.includes(key.replace('_', ' ')) || q.includes(key)) {
+      matchedKey = key;
+      weightKG = w;
+      break;
+    }
+  }
+
+  if (!matchedKey || weightKG <= 0) return null;
+
+  const rawCost = (pricePerMT / 1000) * weightKG;
+  const pricePerPiece = Math.round(rawCost * 100) / 100;
+
+  return {
+    pricePerPieceUSD: pricePerPiece,
+    categoryKey: matchedKey,
+    weightPerPieceKG: weightKG,
+    pricePerMT_USD: pricePerMT,
+    conversionNote: `Calculated from bulk customs rate ($${pricePerMT.toLocaleString()}/MT) using average unit weight of ${weightKG} kg/piece.`,
+  };
+}
+

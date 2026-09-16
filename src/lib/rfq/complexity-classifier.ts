@@ -7,29 +7,29 @@ export function classifyComplexity(state: RFQState): {
   let score = 0;
   
   // 1. Category impact
-  const cat = state.product.classification?.schema_key || 'generic';
+  const cat = state?.product?.classification?.schema_key || 'generic';
   if (['electronics', 'medical', 'food'].includes(cat)) {
     score += 3;
   }
   
   // 2. Customization presence
-  if (state.specifications['branding_required']?.value === 'yes') {
+  if (state?.specifications?.['branding_required']?.value === 'yes') {
     score += 1;
   }
-  if (state.specifications['decoration_method']?.value) {
+  if (state?.specifications?.['decoration_method']?.value) {
     score += 1;
   }
   
   // 3. Compliance requirements
-  if (state.compliance['food_contact']?.value === 'yes') {
+  if (state?.compliance?.['food_contact']?.value === 'yes') {
     score += 2;
   }
   
   // 4. Volume/Value heuristics
-  if (state.quantity.required_quantity?.value && state.quantity.required_quantity.value.toString().toLowerCase().includes('sample')) {
+  if (state?.quantity?.required_quantity?.value && state.quantity.required_quantity.value.toString().toLowerCase().includes('sample')) {
     score += 1;
   }
-  const qtyStr = state.quantity.required_quantity?.value || '0';
+  const qtyStr = state?.quantity?.required_quantity?.value ? String(state.quantity.required_quantity.value) : '0';
   const qty = parseInt(qtyStr.replace(/[^0-9]/g, ''), 10) || 0;
   if (qty > 10000) {
     score += 1;

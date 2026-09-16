@@ -594,7 +594,23 @@ export default function ProductDetailContent() {
               steps={product?.orders?.steps ?? []}
             />
           )}
-          {activeTab === 'files' && <FilesTab files={product?.files ?? []} />}
+          {activeTab === 'files' && (
+            <FilesTab
+              files={[
+                ...dbFiles.map((f) => ({
+                  id: f.id,
+                  name: f.name,
+                  date: f.fileDate,
+                  url: f.fileUrl,
+                  fileType: f.fileType,
+                  sourceContext: f.sourceContext,
+                })),
+                ...(product?.files ?? []).filter(
+                  (pf) => !dbFiles.some((df) => df.name === pf.name)
+                ),
+              ]}
+            />
+          )}
         </div>
       )}
 

@@ -6,7 +6,7 @@ import { ObjectiveRouter } from './objective-router';
 import { DeepResearchOrchestrator } from './deep-research-orchestrator';
 import { BriefingSynthesizer } from './briefing-synthesizer';
 import { AgenticChatOrchestrator } from './agentic-chat-orchestrator';
-import { IntelligenceResponse, StructuredCard } from '../core/intelligence-result';
+import { IntelligenceResponse, StructuredCard, SuggestedAction } from '../core/intelligence-result';
 import { ExecutionEvent } from './research-executor';
 import { SpecElicitationState, createInitialElicitationState, mergeAccumulatedSpecs, AccumulatedSpecs } from '../core/conversation-state';
 import { SpecElicitationResponse } from '../core/sourcing-intent';
@@ -159,12 +159,24 @@ export class IntelligenceEngine {
         evidence: [],
         calculations: [],
         dataGaps: [],
-        suggestedActions: elicitResult.suggestedOptions.map((opt, i) => ({
-          id: `elicit_opt_${i}`,
-          label: opt.label,
-          prompt: opt.value,
-          actionType: 'provide_parameter' as const,
-        })),
+        suggestedActions: (() => {
+          const acts: SuggestedAction[] = elicitResult.suggestedOptions.map((opt, i) => ({
+            id: `elicit_opt_${i}`,
+            label: opt.label,
+            prompt: opt.value,
+            actionType: 'provide_parameter' as const,
+          }));
+          const currentProd = elicitResult.updatedSpecs.product || currentState.accumulatedSpecs.product;
+          if (currentProd) {
+            acts.push({
+              id: 'act_reference_images',
+              label: '📷 Provide reference image',
+              prompt: '__OPEN_IMAGE_SEARCH__',
+              actionType: 'custom_query' as const,
+            });
+          }
+          return acts;
+        })(),
         nextElicitationState: updatedState,
       };
     }

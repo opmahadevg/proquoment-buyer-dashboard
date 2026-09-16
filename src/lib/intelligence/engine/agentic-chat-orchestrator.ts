@@ -340,6 +340,12 @@ Provide an authoritative, highly detailed, data-grounded response answering the 
         actionType: 'run_deep_research',
       },
       {
+        id: `act_ref_img_${Date.now()}`,
+        label: '📷 Provide reference images',
+        prompt: '__OPEN_IMAGE_SEARCH__',
+        actionType: 'custom_query',
+      },
+      {
         id: `act_tariff_${Date.now()}`,
         label: `Check ${getCountryDisplayName(destISO)} Import Tariffs`,
         prompt: `What are the customs tariffs, duties, and trade remedies for importing ${product} into ${getCountryDisplayName(destISO)}?`,

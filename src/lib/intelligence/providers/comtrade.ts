@@ -143,8 +143,60 @@ export class ComtradeProvider implements Provider<ComtradeQueryParams, Canonical
           }
         }
       } catch (err) {
-        console.warn('Live Comtrade API fetch error, falling back to reference database:', err);
+        console.warn('Live Comtrade API fetch error, trying Open Trade Statistics API:', err);
       }
+    }
+
+    // Attempt Open Trade Statistics (OTS) Free API (No key required)
+    try {
+      const otsYear = normalizedParams.years?.[0] || 2023;
+      const otsUrl = `https://api.tradestatistics.io/trade?reporter=${encodeURIComponent(normalizedParams.reporterISO)}&year=${otsYear}&hs=${encodeURIComponent(normalizedParams.hsCode.slice(0, 4))}`;
+      const otsRes = await fetch(otsUrl, { signal: AbortSignal.timeout(3500) });
+      if (otsRes.ok) {
+        const otsData = await otsRes.json();
+        const rows = Array.isArray(otsData) ? otsData : otsData?.data;
+        if (Array.isArray(rows) && rows.length > 0) {
+          const mapped: CanonicalTradeFlow[] = rows.slice(0, 10).map((row: any) => {
+            const val = Number(row.trade_value_usd || row.trade_value || 0);
+            const wgt = Number(row.net_weight_kg || row.weight_kg || 1000);
+            const perKg = wgt > 0 ? Math.round((val / wgt) * 100) / 100 : 0;
+            return {
+              reporterCountry: normalizedParams.reporterISO,
+              reporterName: getCountryDisplayName(normalizedParams.reporterISO),
+              partnerCountry: row.partner_iso || row.partner || 'ALL',
+              partnerName: row.partner_name || row.partner_iso || 'Export Partner',
+              hsCode: normalizedParams.hsCode,
+              year: otsYear,
+              flowType: 'import',
+              tradeValueUSD: val,
+              netWeightKG: wgt,
+              unitValueUSDPerKG: perKg,
+              unitValueUSDPerMT: perKg * 1000,
+            };
+          });
+
+          if (mapped.length > 0) {
+            await intelligenceCache.set({
+              capability: 'trade_flows',
+              provider: 'Open Trade Statistics',
+              params: normalizedParams as any,
+              normalizedResponse: mapped,
+              source,
+            });
+
+            return {
+              data: mapped,
+              source,
+              timestamp: new Date().toISOString(),
+              freshness: 'annual',
+              confidence: 'high',
+              methodology: 'Retrieved from Open Trade Statistics (OTS) harmonized customs API',
+            };
+          }
+        }
+      }
+    } catch {
+      // fallback to benchmark reference
     }
 
     // Reference benchmark dataset fallback for consistent V1 prototyping

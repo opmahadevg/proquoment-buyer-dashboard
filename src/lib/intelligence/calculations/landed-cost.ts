@@ -4,6 +4,8 @@ export interface LandedCostInput {
   basePriceUSD: number; // FOB price per unit
   quantity: number;
   unit: string;
+  unitBasis?: 'piece' | 'MT' | 'KG' | 'unit' | string;
+  buyerTargetPricePerPiece?: number;
   freightCostUSD: number; // estimated freight benchmark
   insuranceRatePercent?: number; // e.g. 0.3% default
   importDutyRatePercent?: number; // e.g. 5%
@@ -49,6 +51,14 @@ export function calculateLandedCost(
     ? Math.round(((unitLanded - input.basePriceUSD) / input.basePriceUSD) * 1000) / 10
     : 0;
 
+  let unitDisparityNotice = '';
+  if (input.buyerTargetPricePerPiece && input.basePriceUSD > 0) {
+    const ratio = input.basePriceUSD / input.buyerTargetPricePerPiece;
+    if (ratio > 20) {
+      unitDisparityNotice = ` ⚠️ Unit disparity notice: Base cost $${input.basePriceUSD} appears to reflect bulk metric tons (MT), while buyer target is $${input.buyerTargetPricePerPiece}/piece.`;
+    }
+  }
+
   const breakdown: LandedCostBreakdown = {
     baseCostTotalUSD: baseTotal,
     freightCostTotalUSD: freightTotal,
@@ -66,6 +76,6 @@ export function calculateLandedCost(
     result: breakdown,
     formula,
     inputs: { ...input },
-    explanation: `Estimated Landed Cost: $${unitLanded.toLocaleString()} USD/${input.unit} (+${deltaPct}% over FOB base)`,
+    explanation: `Estimated Landed Cost: $${unitLanded.toLocaleString()} USD/${input.unit} (+${deltaPct}% over FOB base).${unitDisparityNotice}`,
   };
 }

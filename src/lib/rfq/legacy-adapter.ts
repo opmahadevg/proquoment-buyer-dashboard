@@ -1,6 +1,7 @@
 import { RFQData } from '@/app/new-product/components/NewProductFlow';
 import { RFQState, ProvenancedField } from './types';
 import { createEmptyRFQState } from './state-manager';
+import { synthesizeRFQ } from './synthesizer';
 
 // Helper to convert an old simple string value to a ProvenancedField
 function migrateValue(value: string | undefined | null, pending?: boolean): ProvenancedField | null {
@@ -74,7 +75,7 @@ export function fromLegacyRFQData(old: RFQData | Partial<RFQData>): RFQState {
     });
   }
 
-  return state;
+  return synthesizeRFQ(state);
 }
 
 export function toLegacyRFQData(state: RFQState): RFQData {

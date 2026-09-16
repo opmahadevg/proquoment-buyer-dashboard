@@ -189,8 +189,23 @@ export interface MissingFieldEntry {
 }
 
 // ─── Central RFQ State ───────────────────────────────────────────────
+export interface SizeRunEntry {
+  size_label: string; // e.g. "30x32", "32x32", "M", "L"
+  quantity: number;
+  waist?: number;
+  inseam?: number;
+  ratio?: number;
+}
+
+export interface SizeRunMatrix {
+  entries: SizeRunEntry[];
+  total_quantity: number;
+  size_system?: 'US' | 'EU' | 'UK' | 'Asia' | 'Custom';
+  has_pom?: boolean;
+}
+
 export interface RFQState {
-  version: 2;
+  version: number;
   product: {
     name: ProvenancedField | null;
     classification: ProductClassification | null;
@@ -202,6 +217,7 @@ export interface RFQState {
     required_quantity: ProvenancedField | null;   // Buyer's demand — NOT supplier MOQ
     unit: ProvenancedField | null;
     breakdown: ProvenancedField | null;
+    size_run?: SizeRunMatrix | null;
   };
   specifications: Record<string, ProvenancedField>;
   visual_intent: {

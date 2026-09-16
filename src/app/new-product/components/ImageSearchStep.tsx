@@ -15,15 +15,18 @@ export interface ImageResult {
   original: string;
 }
 
-interface SelectedImage extends ImageResult {
+export interface SelectedImage extends ImageResult {
   note: string;
 }
 
-interface ImageSearchStepProps {
+export interface ImageSearchStepProps {
   productText: string;
   rfqId: string;
   onNext: (selectedImages?: SelectedImage[]) => void;
   onSkip: () => void;
+  origin?: 'rfq' | 'intelligence';
+  intelligenceSessionId?: string;
+  onIntelligenceReturn?: (images: SelectedImage[]) => void;
 }
 
 
@@ -208,7 +211,15 @@ function SelectedRow({
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: ImageSearchStepProps) {
+export default function ImageSearchStep({
+  productText,
+  rfqId,
+  onNext,
+  onSkip,
+  origin = 'rfq',
+  intelligenceSessionId,
+  onIntelligenceReturn,
+}: ImageSearchStepProps) {
   const [query, setQuery] = useState(productText || '');
   const [refinedQuery, setRefinedQuery] = useState('');
   const [results, setResults] = useState<ImageResult[]>([]);
@@ -281,7 +292,14 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
   };
 
   const handleSubmit = async () => {
-    if (selected.length === 0) { onNext([]); return; }
+    if (selected.length === 0) {
+      if (origin === 'intelligence' && onIntelligenceReturn) {
+        onIntelligenceReturn([]);
+      } else {
+        onNext([]);
+      }
+      return;
+    }
     setSaving(true);
     try {
       const payload = selected.map((s) => ({
@@ -291,7 +309,7 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
         position: s.position,
       }));
 
-      // M3 FIX: store visual intent in localStorage for BuilderStep to pick up
+      // M3 FIX: store visual intent in localStorage for BuilderStep or Intelligence to pick up
       const imageUrls = payload.map(img => img.url);
       fetch('/api/ai/analyze-visual-intent', {
         method: 'POST',
@@ -306,16 +324,23 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
           }
         }).catch(e => console.warn('Background visual intent analysis failed:', e));
 
-      await fetch('/api/rfq-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rfqId, images: payload }),
-      });
+      // In RFQ flow, persist to rfq_images. In Intelligence flow, defer until RFQ launch.
+      if (origin !== 'intelligence') {
+        await fetch('/api/rfq-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rfqId, images: payload }),
+        });
+      }
     } catch (e) {
       console.error('Failed to save reference images:', e);
     } finally {
       setSaving(false);
-      onNext(selected);
+      if (origin === 'intelligence' && onIntelligenceReturn) {
+        onIntelligenceReturn(selected);
+      } else {
+        onNext(selected);
+      }
     }
   };
 
@@ -325,40 +350,62 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
   return (
     <div className="min-h-screen bg-[var(--background)] flex flex-col">
       {/* ── Top bar ── */}
-      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-[var(--border)] px-4 md:px-8 py-3 flex items-center justify-between">
-        <Link
-          href="/products-list"
-          className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-        >
-          <span className="text-base">‹</span> Back
-        </Link>
+      <div className="sticky top-0 z-20 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-[var(--border)] px-4 md:px-8 py-3 flex items-center justify-between">
+        {origin === 'intelligence' ? (
+          <button
+            type="button"
+            onClick={onSkip}
+            className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
+          >
+            <span className="text-base">‹</span> Back to Sourcing Advisor
+          </button>
+        ) : (
+          <Link
+            href="/products-list"
+            className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          >
+            <span className="text-base">‹</span> Back
+          </Link>
+        )}
 
         {/* Step indicator */}
-        <div className="flex items-center gap-2">
-          {['Describe', 'Method', 'Visuals', 'Build'].map((label, i) => (
-            <React.Fragment key={label}>
-              <div className="flex items-center gap-1.5">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                  i < 2 ? 'bg-[var(--primary)] text-white'
-                  : i === 2 ? 'bg-[var(--primary)] text-white ring-4 ring-[var(--primary)]/20'
-                  : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
-                }`}>
-                  {i < 2 ? <Check size={10} strokeWidth={3} /> : i + 1}
+        {origin === 'intelligence' ? (
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/40">
+              Proquoment Intelligence
+            </span>
+            <span className="text-xs font-medium text-zinc-500 hidden sm:inline">
+              Reference Visuals
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            {['Describe', 'Method', 'Visuals', 'Build'].map((label, i) => (
+              <React.Fragment key={label}>
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
+                    i < 2 ? 'bg-[var(--primary)] text-white'
+                    : i === 2 ? 'bg-[var(--primary)] text-white ring-4 ring-[var(--primary)]/20'
+                    : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
+                  }`}>
+                    {i < 2 ? <Check size={10} strokeWidth={3} /> : i + 1}
+                  </div>
+                  <span className={`text-[11px] font-medium hidden sm:block ${
+                    i === 2 ? 'text-[var(--primary)]' : i < 2 ? 'text-[var(--muted-foreground)]' : 'text-[var(--muted-foreground)]/60'
+                  }`}>{label}</span>
                 </div>
-                <span className={`text-[11px] font-medium hidden sm:block ${
-                  i === 2 ? 'text-[var(--primary)]' : i < 2 ? 'text-[var(--muted-foreground)]' : 'text-[var(--muted-foreground)]/60'
-                }`}>{label}</span>
-              </div>
-              {i < 3 && <div className="w-6 h-px bg-[var(--border)]" />}
-            </React.Fragment>
-          ))}
-        </div>
+                {i < 3 && <div className="w-6 h-px bg-[var(--border)]" />}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
 
         <button
+          type="button"
           onClick={onSkip}
-          className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
         >
-          Skip <SkipForward size={14} />
+          {origin === 'intelligence' ? 'Cancel' : 'Skip'} <SkipForward size={14} />
         </button>
       </div>
 
@@ -570,7 +617,9 @@ export default function ImageSearchStep({ productText, rfqId, onNext, onSkip }: 
           <div className="px-4 py-4 border-t border-[var(--border)] flex flex-col gap-3">
             {selected.length > 0 && (
               <p className="text-[11px] text-[var(--muted-foreground)] text-center">
-                Images will be saved to your RFQ for supplier context
+                {origin === 'intelligence'
+                  ? 'Images will be added to your sourcing conversation'
+                  : 'Images will be saved to your RFQ for supplier context'}
               </p>
             )}
             <button

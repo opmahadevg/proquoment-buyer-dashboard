@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classifyComplexity } from '@/lib/rfq/complexity-classifier';
 import { buildSystemPrompt } from '@/lib/rfq/system-prompt-builder';
 import { createEmptyRFQState } from '@/lib/rfq/state-manager';
+import { synthesizeRFQ } from '@/lib/rfq/synthesizer';
 import { formatMessagesForProvider } from '@/lib/ai/provider-adapter';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -141,7 +142,24 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const state = rfqState || createEmptyRFQState();
+    const baseState = createEmptyRFQState();
+    const rawState = rfqState || {};
+    const mergedState = {
+      ...baseState,
+      ...rawState,
+      product: { ...baseState.product, ...(rawState.product || {}) },
+      quantity: { ...baseState.quantity, ...(rawState.quantity || {}) },
+      specifications: { ...baseState.specifications, ...(rawState.specifications || {}) },
+      manufacturing: { ...baseState.manufacturing, ...(rawState.manufacturing || {}) },
+      quality: { ...baseState.quality, ...(rawState.quality || {}) },
+      compliance: { ...baseState.compliance, ...(rawState.compliance || {}) },
+      commercial: { ...baseState.commercial, ...(rawState.commercial || {}) },
+      logistics: { ...baseState.logistics, ...(rawState.logistics || {}) },
+      packaging: { ...baseState.packaging, ...(rawState.packaging || {}) },
+      special_requirements: { ...baseState.special_requirements, ...(rawState.special_requirements || {}) },
+      visual_intent: { ...baseState.visual_intent, ...(rawState.visual_intent || {}) },
+    };
+    const state = synthesizeRFQ(mergedState);
     const { complexity } = classifyComplexity(state);
     
     const systemPromptContent = buildSystemPrompt(state, complexity, conversationMode);
@@ -149,8 +167,10 @@ export async function POST(request: NextRequest) {
 
     const FALLBACK_MODELS = [
       'openai/gpt-5.6-luna',
+      'google/gemini-2.5-flash',
       'google/gemini-3.8-flash',
-      'google/gemini-3.7-flash'
+      'google/gemini-3.7-flash',
+      'meta-llama/llama-3.3-70b-instruct'
     ];
 
     let res: Response | null = null;

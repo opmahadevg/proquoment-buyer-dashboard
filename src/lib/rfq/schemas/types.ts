@@ -26,5 +26,6 @@ export interface CategoryFieldDefinition {
     when: Record<string, string[]>;   // conditions: { 'product.intended_use': ['restaurant', 'food'] }
     criticality: import('../types').FieldCriticality;
   }>;
+  render_type?: 'text' | 'select' | 'size_grid' | 'textarea' | 'number';
   default_criticality?: import('../types').FieldCriticality;
 }

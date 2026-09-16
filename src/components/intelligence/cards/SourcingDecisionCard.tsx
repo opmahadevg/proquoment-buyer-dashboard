@@ -134,7 +134,7 @@ export const SourcingDecisionCard: React.FC<Props> = ({ data, onViewEvidence, on
       {onCreateRFQ && (
         <button
           type="button"
-          onClick={onCreateRFQ}
+          onClick={() => onCreateRFQ?.()}
           className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition"
         >
           <span>Create Sourcing Brief & Pre-fill RFQ</span>

@@ -81,6 +81,41 @@ export class SearchGroundingProvider implements Provider<SearchQueryParams, Sear
       }
     }
 
+    // Tier 1B: Brave Search API (uses BRAVE_SEARCH_API_KEY from environment)
+    const braveApiKey = process.env.BRAVE_SEARCH_API_KEY;
+    if (braveApiKey && results.length === 0) {
+      try {
+        const braveUrl = new URL('https://api.search.brave.com/res/v1/web/search');
+        braveUrl.searchParams.set('q', params.query);
+        braveUrl.searchParams.set('count', String(limit));
+
+        const res = await fetch(braveUrl.toString(), {
+          headers: {
+            'Accept': 'application/json',
+            'X-Subscription-Token': braveApiKey,
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const webResults = data.web?.results || [];
+          if (Array.isArray(webResults) && webResults.length > 0) {
+            results = webResults.slice(0, limit).map((r: any) => ({
+              title: r.title || 'Brave Web Result',
+              snippet: r.description || '',
+              url: r.url || '',
+              publishedDate: r.page_age || new Date().toISOString().slice(0, 10),
+              sourceName: r.meta_url?.hostname || 'Brave Search',
+            }));
+            methodology = 'Live Web Search via Brave Search API';
+          }
+        }
+      } catch (err) {
+        console.warn('Brave Search query error, trying next tier:', err);
+      }
+    }
+
     // Tier 2: Google Custom Search JSON API
     const googleApiKey = process.env.GOOGLE_SEARCH_API_KEY;
     const googleCx = process.env.GOOGLE_SEARCH_ENGINE_ID || process.env.GOOGLE_CSE_ID;
@@ -140,10 +175,9 @@ export class SearchGroundingProvider implements Provider<SearchQueryParams, Sear
       }
     }
 
-    // Tier 4: Contextual trade intelligence synthesis fallback (ensures 100% uptime in offline/isolated environments)
+    // Tier 4: Transparent fallback when no live search hits are found
     if (results.length === 0) {
-      results = this.generateContextualResults(params, limit);
-      methodology = 'Synthesized authoritative trade and customs intelligence';
+      methodology = 'No real-time search results found for query';
     }
 
     await intelligenceCache.set({
@@ -159,7 +193,7 @@ export class SearchGroundingProvider implements Provider<SearchQueryParams, Sear
       source,
       timestamp: new Date().toISOString(),
       freshness: 'real-time',
-      confidence: 'high',
+      confidence: results.length > 0 ? 'high' : 'low',
       methodology,
     };
   }
@@ -200,66 +234,6 @@ export class SearchGroundingProvider implements Provider<SearchQueryParams, Sear
     }
 
     return results;
-  }
-
-  private generateContextualResults(params: SearchQueryParams, limit: number): SearchResultItem[] {
-    const q = params.query;
-    const qLower = q.toLowerCase();
-
-    if (params.focus === 'tariffs' || qLower.includes('tariff') || qLower.includes('duty') || qLower.includes('anti-dumping')) {
-      return [
-        {
-          title: `National Customs Tariff Bulletin: Applied Duties and FTAs for ${q}`,
-          snippet: `Official applied tariff schedule indicates active preferential corridor rates under regional FTAs. Bilateral trade remedies, safeguard notices, and MFN rates verified against customs gazettes.`,
-          url: 'https://wits.worldbank.org/tariff-schedule',
-          publishedDate: new Date().toISOString().slice(0, 10),
-          sourceName: 'Customs & Border Gazette',
-        },
-        {
-          title: `Trade Remedy & Anti-Dumping Investigations for ${q}`,
-          snippet: `Directorate General of Trade Remedies and national customs authorities maintain current notification lists. Verify Country of Origin Certificate (COO) to secure preferential 0-5% duty clearance.`,
-          url: 'https://wto.org/english/tratop_e/adp_e/adp_e.htm',
-          publishedDate: new Date().toISOString().slice(0, 10),
-          sourceName: 'International Trade Remedy Monitor',
-        },
-      ].slice(0, limit);
-    }
-
-    if (params.focus === 'commodities' || qLower.includes('commodity') || qLower.includes('spot') || qLower.includes('price')) {
-      return [
-        {
-          title: `Global Commodity Benchmark & Spot Pricing Index for ${q}`,
-          snippet: `Monthly spot market index and institutional FOB export transactions indicate stabilized supply corridors. Trading desk prices reflect current raw material feedstock costs and ocean freight adjustments.`,
-          url: 'https://worldbank.org/en/research/commodity-markets',
-          publishedDate: new Date().toISOString().slice(0, 10),
-          sourceName: 'World Commodity Price Index',
-        },
-        {
-          title: `Industrial Raw Material Pricing & FOB Export Quotes: ${q}`,
-          snippet: `Current commercial supplier quotes for export-grade specifications show competitive export pricing from Indian manufacturing hubs with standard FOB and CIF terms.`,
-          url: 'https://proquoment.com/market-intel/pricing',
-          publishedDate: new Date().toISOString().slice(0, 10),
-          sourceName: 'Proquoment Sourcing Benchmark',
-        },
-      ].slice(0, limit);
-    }
-
-    return [
-      {
-        title: `Bilateral Trade Volume and Customs Flow Analysis: ${q}`,
-        snippet: `Bilateral customs statistics report active container movements with key sourcing origins. Market share demonstrates diversified supplier supply chains and robust import demand.`,
-        url: 'https://comtradeplus.un.org',
-        publishedDate: new Date().toISOString().slice(0, 10),
-        sourceName: 'UN Comtrade & Customs Monitor',
-      },
-      {
-        title: `Export Logistics and Compliance Verification for ${q}`,
-        snippet: `Port customs clearance protocols require verified commercial invoices, packing lists, and standard quality certifications before inbound processing.`,
-        url: 'https://trade.gov/market-intelligence',
-        publishedDate: new Date().toISOString().slice(0, 10),
-        sourceName: 'Global Trade Administration',
-      },
-    ].slice(0, limit);
   }
 
   async healthCheck(): Promise<boolean> {

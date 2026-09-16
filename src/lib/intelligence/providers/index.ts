@@ -16,6 +16,7 @@ export * from './worldbank-commodities';
 export * from './freight-heuristic';
 export * from './proquoment-internal';
 export * from './search-grounding';
+export * from './web-scraper';
 
 // Initialize and register all core providers
 const comtrade = new ComtradeProvider();

@@ -1,6 +1,71 @@
 import { ToolDefinition, ToolResult, ToolContext } from './types';
 import { HSCodeCandidate } from '../core/product-context';
 
+async function fetchLiveHsCode(query: string): Promise<HSCodeCandidate[]> {
+  const cleanQ = query.trim();
+  if (!cleanQ || cleanQ.length < 3) return [];
+  const results: HSCodeCandidate[] = [];
+
+  // Tier 1: tariffnumber.com API V1 (Free, no key)
+  try {
+    const res = await fetch(`https://www.tariffnumber.com/api/v1/cnSuggest?term=${encodeURIComponent(cleanQ)}`, {
+      signal: AbortSignal.timeout(3000),
+      headers: { 'Accept': 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        for (const item of data.slice(0, 2)) {
+          const rawCode = item.id || item.code || item.value;
+          if (rawCode) {
+            const formatted = String(rawCode).replace(/\s+/g, '');
+            const code6 = formatted.length >= 6 ? `${formatted.slice(0, 4)}.${formatted.slice(4, 6)}` : formatted;
+            results.push({
+              code: code6,
+              description: item.label || item.description || item.text || cleanQ,
+              confidence: 'high',
+              reasoning: 'Authoritative classification from TariffNumber EU/WCO database lookup.',
+            });
+          }
+        }
+      }
+    }
+  } catch {
+    // continue
+  }
+
+  // Tier 2: USITC HTS search API
+  if (results.length === 0) {
+    try {
+      const usitcRes = await fetch(`https://hts.usitc.gov/reststop/api/details/search?query=${encodeURIComponent(cleanQ)}`, {
+        signal: AbortSignal.timeout(3500),
+        headers: { 'Accept': 'application/json' },
+      });
+      if (usitcRes.ok) {
+        const usData = await usitcRes.json();
+        const hits = usData?.results || usData?.data || [];
+        if (Array.isArray(hits) && hits.length > 0) {
+          for (const hit of hits.slice(0, 2)) {
+            const hts = hit.htsno || hit.hts_number;
+            if (hts) {
+              results.push({
+                code: hts.slice(0, 7),
+                description: hit.description || cleanQ,
+                confidence: 'high',
+                reasoning: 'Verified USITC Harmonized Tariff Schedule official lookup.',
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  return results;
+}
+
 export const identifyHsCodeTool: ToolDefinition = {
   name: 'identify_hs_code',
   description: 'Determines primary 6-digit Harmonized System (HS) code candidates and classification rationale for international trade customs declaration.',
@@ -23,6 +88,16 @@ export const identifyHsCodeTool: ToolDefinition = {
     const dest = params.destination_country || 'Global';
 
     const candidates: HSCodeCandidate[] = [];
+
+    // Attempt live lookup first
+    try {
+      const liveHits = await fetchLiveHsCode(name);
+      if (liveHits && liveHits.length > 0) {
+        candidates.push(...liveHits);
+      }
+    } catch {
+      // ignore
+    }
 
     if (name.includes('teddy') || name.includes('plush') || name.includes('toy') || name.includes('stuffed')) {
       candidates.push(
@@ -110,6 +185,85 @@ export const identifyHsCodeTool: ToolDefinition = {
         description: 'Electrothermic coffee or tea makers and domestic brewing appliances',
         confidence: 'high',
         reasoning: 'WCO classification for electric commercial and residential coffee brewing equipment.',
+      });
+    } else if (
+      name.includes('jean') ||
+      name.includes('denim') ||
+      name.includes('5-pocket') ||
+      name.includes('trouser') ||
+      name.includes('pants') ||
+      name.includes('chino') ||
+      name.includes('slacks')
+    ) {
+      candidates.push(
+        {
+          code: '6203.42',
+          description: "Men's or boys' trousers, bib and brace overalls, breeches and shorts, of cotton (woven denim jeans & twill pants)",
+          confidence: 'high',
+          reasoning: 'Primary WCO Harmonized System 6-digit classification for men\'s woven cotton denim jeans and trousers (Chapter 62).',
+        },
+        {
+          code: '6204.62',
+          description: "Women's or girls' trousers, bib and brace overalls, breeches and shorts, of cotton",
+          confidence: 'medium',
+          reasoning: 'Alternative heading for women\'s denim and cotton trousers.',
+        }
+      );
+    } else if (name.includes('skirt')) {
+      candidates.push({
+        code: '6204.52',
+        description: "Women's or girls' skirts and divided skirts, of cotton",
+        confidence: 'high',
+        reasoning: 'WCO classification for women\'s woven cotton skirts.',
+      });
+    } else if (name.includes('jacket') || name.includes('blazer') || name.includes('coat') || name.includes('parka') || name.includes('puffer')) {
+      candidates.push({
+        code: '6201.12',
+        description: "Men's or boys' overcoats, car coats, capes, cloaks, anoraks and wind-jackets, of cotton",
+        confidence: 'high',
+        reasoning: 'WCO classification for men\'s woven outerwear and jackets.',
+      });
+    } else if (name.includes('dress') && !name.includes('shirt')) {
+      candidates.push({
+        code: '6204.42',
+        description: "Women's or girls' dresses, of cotton",
+        confidence: 'high',
+        reasoning: 'WCO classification for women\'s cotton dresses.',
+      });
+    } else if (name.includes('polo') || name.includes('button-down') || name.includes('woven shirt')) {
+      candidates.push({
+        code: '6205.20',
+        description: "Men's or boys' shirts, of cotton (woven)",
+        confidence: 'high',
+        reasoning: 'WCO classification for men\'s woven cotton shirts.',
+      });
+    } else if (name.includes('sweater') || name.includes('pullover') || name.includes('cardigan') || name.includes('hoodie')) {
+      candidates.push({
+        code: '6110.20',
+        description: "Jerseys, pullovers, cardigans, waistcoats and similar articles, knitted or crocheted, of cotton",
+        confidence: 'high',
+        reasoning: 'WCO classification for knitted cotton pullovers and sweatshirts.',
+      });
+    } else if (name.includes('sheet') || name.includes('bedding') || name.includes('linen')) {
+      candidates.push({
+        code: '6302.21',
+        description: "Bed linen, printed, of cotton",
+        confidence: 'high',
+        reasoning: 'WCO classification for woven cotton bed linen.',
+      });
+    } else if (name.includes('towel')) {
+      candidates.push({
+        code: '6302.60',
+        description: "Toilet linen and kitchen linen, of terry towelling or similar terry fabrics, of cotton",
+        confidence: 'high',
+        reasoning: 'WCO classification for cotton terry towels.',
+      });
+    } else if (name.includes('tote') || name.includes('canvas bag')) {
+      candidates.push({
+        code: '4202.92',
+        description: "Trunks, suitcases, vanity cases, executive-cases, briefcases, school satchels, with outer surface of textile materials",
+        confidence: 'high',
+        reasoning: 'WCO classification for textile bags and totes.',
       });
     } else if (name.includes('apparel') || name.includes('shirt') || name.includes('clothing') || name.includes('textile')) {
       candidates.push(
@@ -256,12 +410,39 @@ export const identifyHsCodeTool: ToolDefinition = {
         reasoning: 'Classification for protective screen overlays and tempered display glass.',
       });
     } else {
-      candidates.push({
-        code: '3926.90',
-        description: 'Commercial manufactured goods and fabricated articles n.e.s.',
-        confidence: 'medium',
-        reasoning: 'Provisional HS classification pending detailed material composition review.',
-      });
+      const isTextile = name.includes('textile') || name.includes('fabric') || name.includes('garment') || name.includes('wear') || name.includes('cotton');
+      const isFood = name.includes('food') || name.includes('seed') || name.includes('grain') || name.includes('crop') || name.includes('agri');
+      const isPlastic = name.includes('plastic') || name.includes('polymer') || name.includes('resin') || name.includes('tpu') || name.includes('pvc');
+
+      if (isTextile) {
+        candidates.push({
+          code: '6203.42',
+          description: 'Woven cotton garments and apparel articles (Chapter 62)',
+          confidence: 'low',
+          reasoning: 'Provisional apparel classification pending fabric weave and garment cut specifications.',
+        });
+      } else if (isFood) {
+        candidates.push({
+          code: '2106.90',
+          description: 'Food preparations and edible products n.e.s.',
+          confidence: 'low',
+          reasoning: 'Provisional food commodity classification pending ingredient breakdown.',
+        });
+      } else if (isPlastic) {
+        candidates.push({
+          code: '3926.90',
+          description: 'Other articles of plastics and articles of other materials of headings 39.01 to 39.14',
+          confidence: 'medium',
+          reasoning: 'Provisional plastic/polymer goods classification.',
+        });
+      } else {
+        candidates.push({
+          code: '9999.99',
+          description: 'Unclassified commercial article (Pending customs broker advisory)',
+          confidence: 'low',
+          reasoning: 'Unmatched product category. Submit RFQ with complete spec sheet for verified customs declaration.',
+        });
+      }
     }
 
     const primary = candidates[0];

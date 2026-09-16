@@ -1,13 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   TrendingUp,
   ShieldCheck,
   Compass,
-  FolderKanban,
   History,
   ArrowRight,
   ChevronDown,
@@ -26,7 +24,6 @@ export const IntelligenceHome: React.FC<Props> = ({ onStart }) => {
   const { user } = useAuth();
   const { resetElicitation, setActiveSession, addMessage } = useIntelligenceStore(user?.id);
 
-  const [workspaces, setWorkspaces] = useState<any[]>([]);
   const [userSessions, setUserSessions] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(true);
 
@@ -34,19 +31,16 @@ export const IntelligenceHome: React.FC<Props> = ({ onStart }) => {
     let isMounted = true;
     async function loadUserData() {
       if (!user?.id) {
-        setWorkspaces([]);
         setUserSessions([]);
         setLoadingHistory(false);
         return;
       }
       setLoadingHistory(true);
       try {
-        const [wsRes, sessRes] = await Promise.all([
-          fetch(`/api/intelligence/workspaces?buyerId=${user.id}`).then((r) => r.json()).catch(() => ({ workspaces: [] })),
-          fetch(`/api/intelligence/sessions?buyerId=${user.id}`).then((r) => r.json()).catch(() => ({ sessions: [] })),
-        ]);
+        const sessRes = await fetch(`/api/intelligence/sessions?buyerId=${user.id}`)
+          .then((r) => r.json())
+          .catch(() => ({ sessions: [] }));
         if (isMounted) {
-          setWorkspaces(wsRes.workspaces || []);
           setUserSessions(sessRes.sessions || []);
         }
       } catch (err) {
@@ -129,6 +123,9 @@ export const IntelligenceHome: React.FC<Props> = ({ onStart }) => {
         {/* Lower Section of the Page: Chat input */}
         <div className="w-full pb-6 md:pb-10">
           <IntelligenceChatInput onSend={handleStartResearch} variant="home" />
+          <p className="text-center text-[11px] text-zinc-400 dark:text-zinc-500 mt-2 px-4 leading-normal">
+            Proquoment AI can make mistakes. Submit an RFQ to get verified supplier quotes and accurate trade data.
+          </p>
         </div>
       </div>
 
@@ -181,69 +178,8 @@ export const IntelligenceHome: React.FC<Props> = ({ onStart }) => {
             </div>
           </div>
 
-          {/* Workspaces & Recent Inquiries Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-            {/* Active Workspaces */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-5 shadow-2xs">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <FolderKanban className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Active Workspaces</h3>
-                </div>
-                <span className="text-xs text-zinc-400">
-                  {loadingHistory ? 'Loading...' : `${workspaces.length} active`}
-                </span>
-              </div>
-
-              {loadingHistory ? (
-                <div className="space-y-2 py-2">
-                  <div className="h-14 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 animate-pulse" />
-                  <div className="h-14 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 animate-pulse" />
-                </div>
-              ) : workspaces.length === 0 ? (
-                <div className="text-center py-8 px-4 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/30">
-                  <FolderKanban className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600 mb-2" />
-                  <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">No active workspaces yet</p>
-                  <p className="text-[11px] text-zinc-400 mt-1 max-w-xs mx-auto">
-                    Start researching a product above to generate an institutional sourcing workspace.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {workspaces.map((ws: any) => (
-                    <Link
-                      key={ws.id}
-                      href={`/intelligence/workspace/${ws.id}`}
-                      className="block p-3 rounded-xl border border-zinc-100 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30 transition group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
-                            {ws.product_name || ws.name || 'Sourcing Workspace'}
-                          </div>
-                          <div className="text-[11px] text-zinc-500 mt-0.5">
-                            {ws.hs_code ? `HS ${ws.hs_code} · ` : ''}
-                            {Array.isArray(ws.origin_countries)
-                              ? ws.origin_countries.join(', ')
-                              : (ws.destination_country || 'Global')}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                            Score {ws.sourcing_score || ws.score || 85}/100
-                          </div>
-                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                            {ws.status === 'active' ? 'Ready for RFQ' : ws.status}
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Recent Inquiries */}
+          {/* Recent Inquiries */}
+          <div className="pt-2">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-5 shadow-2xs">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -256,9 +192,9 @@ export const IntelligenceHome: React.FC<Props> = ({ onStart }) => {
               </div>
 
               {loadingHistory ? (
-                <div className="space-y-2 py-2">
-                  <div className="h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 animate-pulse" />
-                  <div className="h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 animate-pulse" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 py-2">
+                  <div className="h-14 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 animate-pulse" />
+                  <div className="h-14 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 animate-pulse" />
                 </div>
               ) : userSessions.length === 0 ? (
                 <div className="text-center py-8 px-4 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/30">
@@ -269,13 +205,13 @@ export const IntelligenceHome: React.FC<Props> = ({ onStart }) => {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {userSessions.slice(0, 5).map((sess: any) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {userSessions.slice(0, 8).map((sess: any) => (
                     <button
                       key={sess.id}
                       type="button"
                       onClick={() => router.push(`/intelligence/research?session=${sess.id}`)}
-                      className="w-full text-left p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition flex items-center justify-between text-xs group"
+                      className="w-full text-left p-3 rounded-xl border border-zinc-100 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition flex items-center justify-between text-xs group"
                     >
                       <div className="truncate pr-3">
                         <div className="font-medium text-zinc-800 dark:text-zinc-200 truncate group-hover:text-zinc-950 dark:group-hover:text-white">

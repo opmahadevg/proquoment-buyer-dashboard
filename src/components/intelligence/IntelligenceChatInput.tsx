@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Send, Zap, Paperclip, FileText, X } from 'lucide-react';
+import { Send, Zap, Paperclip, FileText, X, Image as ImageIcon } from 'lucide-react';
 import { ResearchDepth } from '@/lib/intelligence/core';
 import { IntelligenceAttachment } from '@/lib/intelligence/store';
 
@@ -9,9 +9,15 @@ interface Props {
   onSend: (query: string, depth: ResearchDepth, attachments?: IntelligenceAttachment[]) => void;
   disabled?: boolean;
   variant?: 'home' | 'chat';
+  onOpenImageSearch?: () => void;
 }
 
-export const IntelligenceChatInput: React.FC<Props> = ({ onSend, disabled, variant = 'home' }) => {
+export const IntelligenceChatInput: React.FC<Props> = ({
+  onSend,
+  disabled,
+  variant = 'home',
+  onOpenImageSearch,
+}) => {
   const [input, setInput] = useState('');
   const [depth, setDepth] = useState<ResearchDepth>('standard');
   const [attachments, setAttachments] = useState<IntelligenceAttachment[]>([]);
@@ -207,6 +213,20 @@ export const IntelligenceChatInput: React.FC<Props> = ({ onSend, disabled, varia
                   </span>
                 )}
               </button>
+
+              {/* Reference Images Search Button */}
+              {onOpenImageSearch && (
+                <button
+                  type="button"
+                  onClick={onOpenImageSearch}
+                  disabled={disabled}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-900/60 hover:border-indigo-300 dark:hover:border-indigo-700 bg-indigo-50/60 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-medium text-indigo-700 dark:text-indigo-300 transition cursor-pointer shadow-2xs"
+                  title="Search & select reference product images"
+                >
+                  <ImageIcon className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Reference Images</span>
+                </button>
+              )}
 
               {/* Depth Selector */}
               <div className="flex items-center gap-1 bg-zinc-100/80 dark:bg-zinc-800/80 p-1 rounded-xl text-xs">

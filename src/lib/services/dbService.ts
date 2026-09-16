@@ -76,6 +76,8 @@ export interface DbProductFile {
   name: string;
   fileDate: string;
   fileUrl: string;
+  fileType?: string;
+  sourceContext?: string;
 }
 
 export interface DbProductUpdate {
@@ -975,6 +977,27 @@ export const fileService = {
 
       const files: DbProductFile[] = [];
 
+      // 1. Fetch directly linked product_files (e.g. from RFQ chat, visual preview, uploads)
+      const { data: directFiles, error: directErr } = await supabase
+        .from('product_files')
+        .select('*')
+        .eq('product_id', productId)
+        .order('created_at', { ascending: false });
+
+      if (directFiles && directFiles.length > 0) {
+        directFiles.forEach((pf) => {
+          files.push({
+            id: pf.id,
+            productId,
+            name: pf.file_name,
+            fileDate: formatDate(pf.created_at),
+            fileUrl: pf.file_url,
+            fileType: pf.file_type,
+            sourceContext: pf.source_context,
+          });
+        });
+      }
+
       if (orderIds.length > 0) {
         const { data: docs, error: docErr } = await supabase
           .from('documents')
@@ -990,6 +1013,8 @@ export const fileService = {
               name: doc.name || `${doc.type || 'Document'} - ${doc.order_id}`,
               fileDate: formatDate(doc.uploaded_at),
               fileUrl: doc.file_url || '',
+              fileType: 'order_doc',
+              sourceContext: 'orders',
             });
           });
         }
@@ -1011,6 +1036,8 @@ export const fileService = {
             name: sample.doc_name || `Sample Spec Document - ${sample.id}`,
             fileDate: formatDate(sample.requested_at),
             fileUrl: sample.doc_url,
+            fileType: 'sample_doc',
+            sourceContext: 'samples',
           });
         }
       });
@@ -1019,6 +1046,58 @@ export const fileService = {
     } catch (err: any) {
       if (isSchemaError(err)) throw err;
       return [];
+    }
+  },
+
+  async addProductFile(entry: {
+    productId: string;
+    fileName: string;
+    fileUrl: string;
+    fileType: 'buyer_upload' | 'ai_generated_concept' | 'tech_pack' | 'reference_image' | 'spec_sheet' | 'rfq_document' | string;
+    mimeType?: string;
+    fileSizeBytes?: number;
+    sourceContext?: string;
+    metadata?: Record<string, any>;
+  }): Promise<DbProductFile | null> {
+    const supabase = createClient();
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const { data, error } = await supabase
+        .from('product_files')
+        .insert({
+          product_id: entry.productId,
+          buyer_id: user?.id || null,
+          file_name: entry.fileName,
+          file_url: entry.fileUrl,
+          file_type: entry.fileType,
+          mime_type: entry.mimeType || null,
+          file_size_bytes: entry.fileSizeBytes || null,
+          source_context: entry.sourceContext || 'builder',
+          metadata: entry.metadata || {},
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('Could not insert into product_files table:', error.message);
+        return null;
+      }
+
+      return {
+        id: data.id,
+        productId: entry.productId,
+        name: data.file_name,
+        fileDate: formatDate(data.created_at),
+        fileUrl: data.file_url,
+        fileType: data.file_type,
+        sourceContext: data.source_context,
+      };
+    } catch (err) {
+      console.warn('fileService.addProductFile failed silently:', err);
+      return null;
     }
   },
 };

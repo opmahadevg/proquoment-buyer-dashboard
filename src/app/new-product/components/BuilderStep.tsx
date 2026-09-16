@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRFQChat } from '@/lib/hooks/useRFQChat';
 import { saveProduct } from '@/lib/productStore';
 import { submitRFQ, saveDraftRFQ, fetchDraftRFQ, deleteDraftRFQ } from '@/lib/services/procurementApi';
+import { fileService } from '@/lib/services/dbService';
 import { CheckCircle, Loader2, Save, EyeOff, Eye, Paperclip, ArrowUp, X } from 'lucide-react';
 import { IntelligenceRFQBanner } from '@/components/intelligence/IntelligenceRFQBanner';
 import { MessageBubble, TypingIndicator } from './ChatMessage';
@@ -84,6 +85,29 @@ export default function BuilderStep({
   
   const rfqRef = useRef<RFQState>(rfqState);
   useEffect(() => { rfqRef.current = rfqState; }, [rfqState]);
+
+  // Reactive sync: if prefilledRfq updates after mount, merge it into rfqState
+  useEffect(() => {
+    if (!prefilledRfq) return;
+    setRfqState((prev) => {
+      if (prefilledRfq.product) {
+        const emptyState = createEmptyRFQState();
+        return {
+          ...emptyState,
+          product: { ...emptyState.product, ...prefilledRfq.product },
+          quantity: { ...emptyState.quantity, ...(prefilledRfq.quantity || {}) },
+          specifications: { ...emptyState.specifications, ...(prefilledRfq.specifications || {}) },
+          manufacturing: { ...emptyState.manufacturing, ...(prefilledRfq.manufacturing || {}) },
+          commercial: { ...emptyState.commercial, ...(prefilledRfq.commercial || {}) },
+        };
+      } else if (prefilledRfq.productName || prefilledRfq.category) {
+        return fromLegacyRFQData(prefilledRfq as any);
+      }
+      return prev;
+    });
+  // Only run when prefilledRfq identity changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefilledRfq]);
   
   const [panelOpen, setPanelOpen] = useState(true);
   const [conversationHistory, setConversationHistory] = useState<{ role: string; content: string }[]>([]);
@@ -640,8 +664,16 @@ export default function BuilderStep({
         setTimeout(() => triggerDraftSave(), 500);
       }
     } else {
-      // Failed, remove typing indicator
-      setMessages(prev => prev.slice(0, -1));
+      // Failed — reset initialized so user can retry, and show an in-chat error card
+      setInitialized(false);
+      const retryMsg: Message = {
+        id: typingMsgId,
+        role: 'ai',
+        text: '⚠️ Failed to connect to the intelligence engine. Check your connection or try again.',
+        options: ['Retry connecting'],
+        isStreaming: false,
+      };
+      setMessages(prev => [...prev.slice(0, -1), retryMsg]);
     }
   };
 
@@ -735,6 +767,11 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
     }
     if (trimmed === 'Looks right as is' || trimmed === 'Looks right' || trimmed === 'Looks good') {
       handleConfirmVisual('');
+      return;
+    }
+    if (trimmed === 'Retry connecting') {
+      // Re-attempt the initial AI turn
+      initializeConversation();
       return;
     }
     if ((!trimmed && attachedImages.length === 0) || isProcessing) return;
@@ -887,6 +924,40 @@ Please synthesize these references into ONE single custom product (e.g. borrow t
           });
         } catch (e) {
           console.warn('Reference image relink failed:', e);
+        }
+      }
+
+      if (realId) {
+        // Sync confirmed visual concept to product_files
+        if (confirmedVisual) {
+          try {
+            await fileService.addProductFile({
+              productId: realId,
+              fileName: `${title} - Spec Render.png`,
+              fileUrl: confirmedVisual,
+              fileType: 'ai_generated_concept',
+              sourceContext: 'visual_preview',
+            });
+          } catch (e) {
+            console.warn('Failed to sync confirmed visual file:', e);
+          }
+        }
+        // Sync chat reference images to product_files
+        try {
+          const chatImages = (messages || []).flatMap((m) => m.images || []);
+          for (const img of chatImages) {
+            if (img.url) {
+              await fileService.addProductFile({
+                productId: realId,
+                fileName: img.title || 'Reference Image.png',
+                fileUrl: img.url,
+                fileType: 'reference_image',
+                sourceContext: 'chat',
+              });
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to sync chat image files:', e);
         }
       }
     } catch (err) {

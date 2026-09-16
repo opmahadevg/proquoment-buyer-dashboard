@@ -3,6 +3,7 @@ import { ProductContext } from './core/product-context';
 import { MarketContext } from './core/market-context';
 import { PriceRange } from './core/economics-context';
 import { Assumption, DataGap } from './core/data-gap';
+import { normalizeToPerPiece } from './calculations/price-normalizer';
 
 export type FieldClassification =
   | 'buyer_provided'
@@ -87,7 +88,13 @@ export function generateSourcingBrief(sourcingObj: SourcingObject): SourcingBrie
       value: economics.observedTradeUnitValues,
       classification: 'research_indicates',
       confidence: 'high',
-      provenance: 'UN Comtrade historical trade unit values',
+      provenance: (() => {
+        const avg = (economics.observedTradeUnitValues.low + economics.observedTradeUnitValues.high) / 2;
+        const perPiece = normalizeToPerPiece(avg || 0, product.canonicalName);
+        return perPiece
+          ? `UN Comtrade (bulk MT basis — per-piece normalization: ~$${perPiece.pricePerPieceUSD}/piece)`
+          : 'UN Comtrade historical trade unit values';
+      })(),
     } : undefined,
     incoterm: {
       value: logistics.recommendedIncoterms?.[0] || 'CIF',

@@ -27,6 +27,7 @@ interface Props {
   onActionClick?: (prompt: string) => void;
   onCreateRFQ?: (customBrief?: any) => void;
   onUpdateBriefing?: (cardId: string, updatedData: any) => void;
+  onOpenImageSearch?: () => void;
 }
 
 function normalizeMarkdownContent(text: string): string {
@@ -61,6 +62,7 @@ export const IntelligenceChatMessage: React.FC<Props> = ({
   onActionClick,
   onCreateRFQ,
   onUpdateBriefing,
+  onOpenImageSearch,
 }) => {
   const [selectedEvidence, setSelectedEvidence] = useState<Evidence | null>(null);
 
@@ -77,16 +79,21 @@ export const IntelligenceChatMessage: React.FC<Props> = ({
                   key={idx}
                   className="flex items-center gap-2 p-1.5 pr-3 rounded-xl bg-zinc-100 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700/80 shadow-2xs"
                 >
-                  {isImg && att.dataUrl ? (
+                  {isImg && (att.dataUrl || att.url) ? (
                     <a
-                      href={att.dataUrl}
+                      href={att.url || att.dataUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-11 h-11 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 block shrink-0 hover:opacity-90 transition"
+                      className="w-11 h-11 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 block shrink-0 hover:opacity-90 transition bg-zinc-50 dark:bg-zinc-800"
                       title="Open image full size"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
+                      <img
+                        src={att.dataUrl || att.url}
+                        alt={att.name}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
                     </a>
                   ) : (
                     <div className="w-9 h-9 rounded-lg bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
@@ -296,7 +303,18 @@ export const IntelligenceChatMessage: React.FC<Props> = ({
                 <button
                   key={action.id}
                   type="button"
-                  onClick={() => onActionClick?.(action.prompt)}
+                  onClick={() => {
+                    if (
+                      action.prompt === '__OPEN_IMAGE_SEARCH__' ||
+                      action.id === 'act_reference_images' ||
+                      action.id.startsWith('act_ref_img') ||
+                      action.label.toLowerCase().includes('reference image')
+                    ) {
+                      onOpenImageSearch?.();
+                    } else {
+                      onActionClick?.(action.prompt);
+                    }
+                  }}
                   className={`px-3.5 py-1.5 rounded-full border text-sm font-medium transition-all duration-150 whitespace-nowrap flex-shrink-0 cursor-pointer shadow-2xs flex items-center gap-1.5 ${
                     isSuggestMe
                       ? 'border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-semibold ring-1 ring-indigo-200 dark:ring-indigo-800'
@@ -308,6 +326,12 @@ export const IntelligenceChatMessage: React.FC<Props> = ({
                 </button>
               );
             })}
+        </div>
+      )}
+
+      {role === 'assistant' && /HS\s*\d{4}|tariff|duty|landed cost|FOB|USD\/MT|compliance|certification/i.test(content) && (
+        <div className="flex items-center gap-1.5 mt-2 pt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+          <span>⚠️ AI estimates indicative only. Always verify HS codes and tariff rates before customs filing.</span>
         </div>
       )}
 

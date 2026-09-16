@@ -35,7 +35,8 @@ export function useRFQChat() {
 
           if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.error || `Server error: ${res.status}`);
+            const detail = errorData.details || errorData.error || `Server error: ${res.status}`;
+            throw new Error(detail);
           }
 
           const responseData = await res.json();
@@ -48,7 +49,7 @@ export function useRFQChat() {
             const finalError = err instanceof Error ? err : new Error('Unknown error in AI response');
             setError(finalError);
             setIsLoading(false);
-            toast.error("Failed to connect to the intelligence engine. Please try again.");
+            toast.error(`Intelligence engine: ${finalError.message}`);
             return null;
           }
           currentRetry++;

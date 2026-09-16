@@ -18,6 +18,12 @@ const nextConfig = {
     remotePatterns: imageHosts,
     minimumCacheTTL: 60,
   },
+
+  // Fix HTTP 431: Supabase auth JWT cookies can be 20KB+ across chunks.
+  // NODE_OPTIONS=--max-http-header-size=65536 is set in .env.local for persistent effect.
+  httpAgentOptions: {
+    keepAlive: true,
+  },
 };
 
 export default withSentryConfig(nextConfig, {
