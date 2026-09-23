@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const MODEL = 'openai/gpt-5.6-luna';
+const MODEL = 'openai/gpt-6-luna';
 
 // ─── SSE stream converter ──────────────────────────────────────────────────────
 function buildSSEStream(providerResponse: Response): NextResponse {
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
 
     const FALLBACK_MODELS = [
-      'openai/gpt-5.6-luna',
+      'openai/gpt-6-luna',
       'google/gemini-3.8-flash',
       'google/gemini-3.7-flash'
     ];

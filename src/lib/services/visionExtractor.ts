@@ -2,16 +2,16 @@
  * Vision Extraction Service -- server-side only
  *
  * Replaces SerpApi Google Lens for document/image OCR and data extraction.
- * Single GPT-5.6-Luna vision call: OCR + layout understanding + structured JSON
+ * Single GPT-6-Luna vision call: OCR + layout understanding + structured JSON
  * No Supabase upload needed -- images sent as base64 data URLs
- * Fallback: gpt-5.6-luna -> google/gemini-3.7-flash
+ * Fallback: gpt-6-luna -> google/gemini-3.7-flash
  */
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 
 const FALLBACK_MODELS = [
-  'openai/gpt-5.6-luna',
+  'openai/gpt-6-luna',
   'google/gemini-3.8-flash',
   'google/gemini-3.7-flash',
 ];

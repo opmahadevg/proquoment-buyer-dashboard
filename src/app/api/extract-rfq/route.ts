@@ -3,17 +3,17 @@
  *
  * Upgraded extraction pipeline:
  *  1. Receive multipart form data (PDF/image files)
- *  2. For PDFs with text layer  -> pdf-parse text -> GPT-5.6-Luna -> structured JSON
- *  3. For scanned/image PDFs    -> pdf2pic -> page images -> GPT-5.6-Luna vision -> JSON
- *  4. For image files           -> base64 encode -> GPT-5.6-Luna vision -> JSON
+ *  2. For PDFs with text layer  -> pdf-parse text -> GPT-6-Luna -> structured JSON
+ *  3. For scanned/image PDFs    -> pdf2pic -> page images -> GPT-6-Luna vision -> JSON
+ *  4. For image files           -> base64 encode -> GPT-6-Luna vision -> JSON
  *  5. After extraction          -> productIsolator -> focused designQuery for image search
  *  6. Return { rfqData, extractedText, extractionMethod, designQuery, designAttributes }
  *
  * Key changes from previous version:
- *  - SerpApi Google Lens REMOVED -- replaced by GPT-5.6-Luna vision (visionExtractor.ts)
+ *  - SerpApi Google Lens REMOVED -- replaced by GPT-6-Luna vision (visionExtractor.ts)
  *  - No Supabase temp upload needed -- images sent as base64
  *  - Scanned PDFs now work via pdf2pic page conversion
- *  - All LLM calls use GPT-5.6-Luna (was gpt-4o-mini) with Gemini 3.7 Flash fallback
+ *  - All LLM calls use GPT-6-Luna (was gpt-4o-mini) with Gemini 3.7 Flash fallback
  *  - productDesignQuery added -- isolated product+design for accurate image search
  *
  * File size limit: 50 MB total batch
@@ -29,7 +29,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB
 
 const FALLBACK_MODELS = [
-  'openai/gpt-5.6-luna',
+  'openai/gpt-6-luna',
   'google/gemini-3.8-flash',
   'google/gemini-3.7-flash',
 ];
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     if (visionImages.length > 0) {
-      // Vision path: GPT-5.6-Luna vision for images (+ optional text context)
+      // Vision path: GPT-6-Luna vision for images (+ optional text context)
       const visionResult = await extractWithVision(visionImages, partialText || undefined);
       rfqData = visionResult.rfqData;
       extractedText = visionResult.extractedText || partialText;
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     if (partialText && (extractionMethod === 'text' || extractionMethod === 'mixed')) {
-      // Text path: GPT-5.6-Luna text extraction for text-layer PDFs
+      // Text path: GPT-6-Luna text extraction for text-layer PDFs
       const textRfqData = await extractRfqFromText(partialText);
 
       if (extractionMethod === 'mixed' && rfqData) {

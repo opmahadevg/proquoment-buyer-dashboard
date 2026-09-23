@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     }
 
     const FALLBACK_MODELS = [
-      'openai/gpt-5.6-luna',
+      'openai/gpt-6-luna',
       'google/gemini-3.8-flash',
       'google/gemini-3.7-flash'
     ];

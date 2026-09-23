@@ -2,7 +2,7 @@
  * Product+Design Isolator -- server-side only
  *
  * Given ANY text input (full RFQ, front-page text, extracted document text),
- * uses GPT-5.6-Luna to extract ONLY the product identity and design-relevant
+ * uses GPT-6-Luna to extract ONLY the product identity and design-relevant
  * specifications. Strips commercial noise (location, incoterms, payment, quantity).
  *
  * Used in two places:
@@ -14,7 +14,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 
 const FALLBACK_MODELS = [
-  'openai/gpt-5.6-luna',
+  'openai/gpt-6-luna',
   'google/gemini-3.8-flash',
   'google/gemini-3.7-flash',
 ];

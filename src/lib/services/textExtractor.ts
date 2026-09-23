@@ -1,13 +1,13 @@
 /**
  * Text-layer RFQ Extraction Service -- server-side only
- * Primary Model: google/gemini-3.8-flash (with gemini-3.7-flash and gpt-5.6-luna fallbacks)
+ * Primary Model: google/gemini-3.8-flash (with gemini-3.7-flash and gpt-6-luna fallbacks)
  */
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 
 const FALLBACK_MODELS = [
-  'openai/gpt-5.6-luna',
+  'openai/gpt-6-luna',
   'google/gemini-3.8-flash',
   'google/gemini-3.7-flash',
 ];
